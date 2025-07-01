@@ -1,6 +1,9 @@
 import numpy as np
 import gymnasium as gym
+from gymnasium.envs.registration import register
 
+
+# TODO: should we have a singler player environment wrapper? i dont know
 class FarkleEnv(gym.Env):
 
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
@@ -21,6 +24,7 @@ class FarkleEnv(gym.Env):
             # value of each die
             # bool for each die - True if locked, False otherwise
             # points of each player
+            # amount of points the player has scored already in their turn
         self.observation_space = gym.spaces.Dict(
             {
                 "dice_values": gym.spaces.Discrete(6, start=1, shape=(self.dice,), dtype=int, seed=random_seed),
@@ -60,7 +64,7 @@ class FarkleEnv(gym.Env):
         super().reset(seed=seed)
 
         # reset private representation of the game
-        self._dice_values = self.observation_space["dice_values"].sample()
+        self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._player_points = np.array([0 for _ in range(self.players)], dtype=int)
         self._points_this_turn = 0
@@ -82,7 +86,7 @@ class FarkleEnv(gym.Env):
 
     def _hot_dice(self):
         # partially reset private representation of dice
-        self._dice_values = self.observation_space["dice_values"].sample()
+        self._dice_values = self.observation_space["dice_values"].sample() # TODO: yes sample but we shouldn't force the player to roll
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
 
     def check_lock_legal(self, lock_action):
@@ -94,22 +98,81 @@ class FarkleEnv(gym.Env):
         for i, lock in enumerate(lock_action):
             self._dice_locked[i] += lock
 
+    def _helper_flip_lock(self, string, dice_values, dice_locked):
+        new_locked = [x for x in dice_locked]
+        for char in string:
+            x = int(char)
+            for i, value in enumerate(dice_values): # we find a dice of matching value and undo the lock
+                if value == x and dice_locked[i]:
+                    new_locked[i] = 0
+                    break
+        return new_locked
+
+    def calculate_points(self, dice_values, dice_locked):
+        # TODO: check_farkle and check_legal lock can also be implemented here (for game functionality)
+            # just check if points == 0 and if so, the player farkled?
+        # TODO: add to check legal lock that valid combinations are locked!
+        singles = {"1": 100, "5": 50}
+        doubles = {"11": 0, "22": 0, "33": 0, "44": 0, "55": 0, "66": 0} # a set, since pairs alone are worth nothing
+        triples = {"111": 300, "222": 200, "333": 300, "444": 400, "555": 500, "666": 600}
+        quadruples = {"1111": 1000, "2222": 1000, "3333": 1000, "4444": 1000, "5555": 1000, "6666": 1000} # a set, since quadruples are worth the same
+        quintuples = {"11111": 2000, "22222": 2000, "33333": 2000, "44444": 2000, "55555": 2000, "66666": 2000}
+        sextuples = {"111111": 3000, "222222": 3000, "333333": 3000, "444444": 3000, "555555": 3000, "666666": 3000}
+        straight = {"123456": 1500}
+
+        pair_keys = doubles.keys()
+        three_pair_keys = [pair_keys[i] + pair_keys[j] + pair_keys[k] for i in range(4) for j in range(i+1, 5) for k in range(j+1, 6)]
+        three_pair_value = 1500
+        three_pair = dict.fromkeys(three_pair_keys, three_pair_value)
+
+        triple_keys = triples.keys()
+        two_triple_keys = [triple_keys[i] + triple_keys[j] for i in range(5) for j in range (i+1, 6)]
+        two_triple_value = 2500
+        two_triple = dict.fromkeys(two_triple_keys, two_triple_value)
+
+        quadruple_keys = quadruples.keys()
+        quadruple_and_pair_keys = [pair_keys[i] + quadruple_keys[j] for i in range(5) for j in range(i+1,6)]
+        quadruple_and_pair_keys += [quadruple_keys[i] + pair_keys[j] for i in range(5) for j in range(i+1, 6)]
+        quadruple_and_pair_value = 1500
+        quadruple_and_pair = dict.fromkeys(quadruple_and_pair_keys, quadruple_and_pair_value)
+
+        combinations = {1:[singles], 2:[], 3:[triples], 4:[quadruples], 5:[quintuples], 6:[sextuples, two_triple, quadruple_and_pair, straight, three_pair]} # exclude doubles because we never want to take doubles, and they don't count unless in combination with others
+
+        locked = []
+        num_locked = 0
+        for lock, die in zip(dice_locked, dice_values):
+            if lock:
+                locked.append(die)
+                num_locked += 1
+
+        locked.sort()
+        string = "".join(locked)
+        max_points = 0
+        for i in range(num_locked, 0, -1):
+            for dict in combinations[i]:
+                for key in dict.keys():
+                    if key in string:
+                        current_points = dict[key]
+                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, dice_locked))
+                        max_points = max(current_points, max_points)
+
+        
+        return max_points
+
+
     def step(self, action):
         terminated = False
+        # TODO: calculate points
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
         self._points_this_turn += points
         if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
             terminated = True
             pass    # TODO: handle win
         if action["bank"]:
-            # TODO: end turn, incur -1 reward for not winning
             self._player_points[self._turn] += self._points_this_turn
-            self._new_round()
+            self._new_round() # only do new round if the player banked
+            # TODO: new round if the player farkled
 
-        # if player has not banked, do not end turn, do not give -1 reward
-
-
-        # TODO: call new_round
         truncated = False
         reward = 0 if (terminated or not action["bank"]) else -1    # give -1 for every round until you win
         observation = self._get_obs()
@@ -117,5 +180,12 @@ class FarkleEnv(gym.Env):
         
         return observation, reward, terminated, truncated, info
             
+# register environment
+register(
+    id="gymnasium_env/FarkleEnv-v0",
+    entry_point=FarkleEnv,
+    max_episode_steps=500, # TODO: check if problem
+    )
 
-
+if __name__ == "__main__":
+    print("hello")
