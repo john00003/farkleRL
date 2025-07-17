@@ -162,12 +162,31 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         current_points = dict[key]
-                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, dice_locked))
+                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, dice_locked)) #TODO: does this work?
                         max_points = max(current_points, max_points)
 
         
         return max_points
 
+    def check_farkle(self, dice_values = self._dice_values, dice_locked = self._dice_locked):
+        # return True if player farkled, return False otherwise
+        # TODO: use self._dice_values or allow parameter to be passed in?
+        # TODO: use calculate_points for this?
+        unlocked = []
+        num_unlocked = 0
+        for lock, die in zip(dice_locked, dice_values):
+            if not lock:
+                unlocked.append(die)
+                num_unlocked++
+
+        unlocked.sort()
+        string = "".join(unlocked)
+        for i in range(1, num_unlocked+1):
+            for dict in FarkleEnv.combinations[i]:
+                for key in dict.keys():
+                    if key in string:
+                        return False # the player did not farkle, there is at least one redeemable combination
+        return True
 
     def step(self, action):
         terminated = False
