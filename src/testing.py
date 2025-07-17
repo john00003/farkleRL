@@ -6,6 +6,39 @@ from gymnasium.envs.registration import register
 # TODO: should we have a singler player environment wrapper? i dont know
 class FarkleEnv(gym.Env):
 
+    combinations = self._get_combinations()
+
+    @staticmethod
+    def _get_combinations():
+
+        singles = {"1": 100, "5": 50}
+        doubles = {"11": 0, "22": 0, "33": 0, "44": 0, "55": 0, "66": 0} # a set, since pairs alone are worth nothing
+        triples = {"111": 300, "222": 200, "333": 300, "444": 400, "555": 500, "666": 600}
+        quadruples = {"1111": 1000, "2222": 1000, "3333": 1000, "4444": 1000, "5555": 1000, "6666": 1000} # a set, since quadruples are worth the same
+        quintuples = {"11111": 2000, "22222": 2000, "33333": 2000, "44444": 2000, "55555": 2000, "66666": 2000}
+        sextuples = {"111111": 3000, "222222": 3000, "333333": 3000, "444444": 3000, "555555": 3000, "666666": 3000}
+        straight = {"123456": 1500}
+
+        pair_keys = doubles.keys()
+        three_pair_keys = [pair_keys[i] + pair_keys[j] + pair_keys[k] for i in range(4) for j in range(i+1, 5) for k in range(j+1, 6)]
+        three_pair_value = 1500
+        three_pair = dict.fromkeys(three_pair_keys, three_pair_value)
+
+        triple_keys = triples.keys()
+        two_triple_keys = [triple_keys[i] + triple_keys[j] for i in range(5) for j in range (i+1, 6)]
+        two_triple_value = 2500
+        two_triple = dict.fromkeys(two_triple_keys, two_triple_value)
+
+        quadruple_keys = quadruples.keys()
+        quadruple_and_pair_keys = [pair_keys[i] + quadruple_keys[j] for i in range(5) for j in range(i+1,6)]
+        quadruple_and_pair_keys += [quadruple_keys[i] + pair_keys[j] for i in range(5) for j in range(i+1, 6)]
+        quadruple_and_pair_value = 1500
+        quadruple_and_pair = dict.fromkeys(quadruple_and_pair_keys, quadruple_and_pair_value)
+
+        all_combinations = {1:[singles], 2:[], 3:[triples], 4:[quadruples], 5:[quintuples], 6:[sextuples, two_triple, quadruple_and_pair, straight, three_pair]} # exclude doubles because we never want to take doubles, and they don't count unless in combination with others
+
+        return all_combinations
+
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
             # furthermore, make this extensible to setting where we have multiple agents, not just one
@@ -112,31 +145,7 @@ class FarkleEnv(gym.Env):
         # TODO: check_farkle and check_legal lock can also be implemented here (for game functionality)
             # just check if points == 0 and if so, the player farkled?
         # TODO: add to check legal lock that valid combinations are locked!
-        singles = {"1": 100, "5": 50}
-        doubles = {"11": 0, "22": 0, "33": 0, "44": 0, "55": 0, "66": 0} # a set, since pairs alone are worth nothing
-        triples = {"111": 300, "222": 200, "333": 300, "444": 400, "555": 500, "666": 600}
-        quadruples = {"1111": 1000, "2222": 1000, "3333": 1000, "4444": 1000, "5555": 1000, "6666": 1000} # a set, since quadruples are worth the same
-        quintuples = {"11111": 2000, "22222": 2000, "33333": 2000, "44444": 2000, "55555": 2000, "66666": 2000}
-        sextuples = {"111111": 3000, "222222": 3000, "333333": 3000, "444444": 3000, "555555": 3000, "666666": 3000}
-        straight = {"123456": 1500}
 
-        pair_keys = doubles.keys()
-        three_pair_keys = [pair_keys[i] + pair_keys[j] + pair_keys[k] for i in range(4) for j in range(i+1, 5) for k in range(j+1, 6)]
-        three_pair_value = 1500
-        three_pair = dict.fromkeys(three_pair_keys, three_pair_value)
-
-        triple_keys = triples.keys()
-        two_triple_keys = [triple_keys[i] + triple_keys[j] for i in range(5) for j in range (i+1, 6)]
-        two_triple_value = 2500
-        two_triple = dict.fromkeys(two_triple_keys, two_triple_value)
-
-        quadruple_keys = quadruples.keys()
-        quadruple_and_pair_keys = [pair_keys[i] + quadruple_keys[j] for i in range(5) for j in range(i+1,6)]
-        quadruple_and_pair_keys += [quadruple_keys[i] + pair_keys[j] for i in range(5) for j in range(i+1, 6)]
-        quadruple_and_pair_value = 1500
-        quadruple_and_pair = dict.fromkeys(quadruple_and_pair_keys, quadruple_and_pair_value)
-
-        combinations = {1:[singles], 2:[], 3:[triples], 4:[quadruples], 5:[quintuples], 6:[sextuples, two_triple, quadruple_and_pair, straight, three_pair]} # exclude doubles because we never want to take doubles, and they don't count unless in combination with others
 
         locked = []
         num_locked = 0
@@ -149,7 +158,7 @@ class FarkleEnv(gym.Env):
         string = "".join(locked)
         max_points = 0
         for i in range(num_locked, 0, -1):
-            for dict in combinations[i]:
+            for dict in FarkleEnv.combinations[i]:
                 for key in dict.keys():
                     if key in string:
                         current_points = dict[key]
