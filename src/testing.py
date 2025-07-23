@@ -118,7 +118,6 @@ class FarkleEnv(gym.Env):
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._points_this_turn = 0
         self._turn = (self._turn + 1) % self.players
-        # TODO: for multiple players, increment a turn counter
 
     def _hot_dice(self):
         # partially reset private representation of dice
@@ -179,7 +178,7 @@ class FarkleEnv(gym.Env):
         
         return max_points
 
-    def check_farkle(self, dice_values = self._dice_values, dice_locked = self._dice_locked):
+    def check_farkle(self, dice_values, dice_locked):
         # return True if player farkled, return False otherwise
         # TODO: use self._dice_values or allow parameter to be passed in?
         # TODO: use calculate_points for this?
@@ -204,18 +203,24 @@ class FarkleEnv(gym.Env):
         # TODO: calculate points
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
         self._points_this_turn += points
+
         if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
             terminated = True
             self._player_points[self._turn] += self._points_this_turn
             pass    # TODO: handle win
         else:
             terminated = False
-        if action["bank"]:
+
+        if self.check_farkle(self._dice_values, action["lock"]):
+            assert points == 0
+            self._points_this_turn = 0
+            self._new_round()
+        elif action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
             self._new_round() # only do new round if the player banked
             # TODO: new round if the player farkled
 
-        reward = 0 if (terminated or not action["bank"]) else -1    # give -1 for every round until you win
+        reward = 0 if (terminated or (not action["bank"] and not farkle)) else -1    # give -1 for every round until you win
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         
