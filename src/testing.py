@@ -42,6 +42,7 @@ class FarkleEnv(gym.Env):
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
             # furthermore, make this extensible to setting where we have multiple agents, not just one
+            # need some kind of environment controller class to do this. Gymnasium not built for multiagent
         # number of players in the game
         self.players = players
         # number of dice 
@@ -88,7 +89,7 @@ class FarkleEnv(gym.Env):
         )
 
     def _get_obs(self):
-        return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points}
+        return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points, "turn": self._turn}
 
     def _get_info(self):
         return {
@@ -119,6 +120,8 @@ class FarkleEnv(gym.Env):
         self._points_this_turn = 0
         self._turn = (self._turn + 1) % self.players
 
+    def _check_hot_dice(self, dice_locked):
+        return np.all(dice_locked == 1)
     def _hot_dice(self):
         # partially reset private representation of dice
         self._dice_values = self.observation_space["dice_values"].sample() # TODO: yes sample but we shouldn't force the player to roll
@@ -211,16 +214,20 @@ class FarkleEnv(gym.Env):
         else:
             terminated = False
 
+        hot_dice = self._check_hot_dice(self._dice_locked)
+
         if self.check_farkle(self._dice_values, action["lock"]):
             assert points == 0
             self._points_this_turn = 0
             self._new_round()
         elif action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
-            self._new_round() # only do new round if the player banked
-            # TODO: new round if the player farkled
+            if hot_dice:
+                self._hot_dice()
+            else:
+                self._new_round() # only do new round if the player banked
 
-        reward = 0 if (terminated or (not action["bank"] and not farkle)) else -1    # give -1 for every round until you win
+        reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         
