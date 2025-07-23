@@ -48,6 +48,8 @@ class FarkleEnv(gym.Env):
         self.dice = 6
         # number of points to win the game
         self.max_points = max_points
+        # set combinations to reduce runtime getting it in the future
+        self.combinations = self._get_combinations()
 
         # TODO: use object oriented dice? or dice completely contained within environment?
             # can you do that with gym?
@@ -90,7 +92,8 @@ class FarkleEnv(gym.Env):
 
     def _get_info(self):
         return {
-            "farkle": self.check_farkle(self._dice_values, self._dice_locked)
+            "farkle": self.check_farkle(self._dice_values, self._dice_locked),
+            "winner": self._check_win(),
         }
 
     def reset(self, seed = None, options = None):
@@ -140,6 +143,14 @@ class FarkleEnv(gym.Env):
                     new_locked[i] = 0
                     break
         return new_locked
+
+    # checks if any player has win, returning the player number if so, -1 otherwise
+    def _check_win(self):
+        for i, points in enumerate(self._player_points):
+            if points > self.max_points:
+                return i
+        return -1
+
 
     def calculate_points(self, dice_values, dice_locked):
         # TODO: check_farkle and check_legal lock can also be implemented here (for game functionality)
@@ -195,16 +206,18 @@ class FarkleEnv(gym.Env):
         self._points_this_turn += points
         if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
             terminated = True
+            self._player_points[self._turn] += self._points_this_turn
             pass    # TODO: handle win
+        else:
+            terminated = False
         if action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
             self._new_round() # only do new round if the player banked
             # TODO: new round if the player farkled
 
-        truncated = False
         reward = 0 if (terminated or not action["bank"]) else -1    # give -1 for every round until you win
         observation = self._get_obs()
-        info = self._get_info()
+        info = self._get_info() # TODO: add to info if turn ended?
         
         return observation, reward, terminated, truncated, info
             
