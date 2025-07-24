@@ -89,7 +89,7 @@ class FarkleEnv(gym.Env):
         )
 
     def _get_obs(self):
-        return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points, "turn": self._turn}
+        return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points, "turn": self._turn, "points_this_turn": self._points_this_turn}
 
     def _get_info(self):
         return {
@@ -138,23 +138,23 @@ class FarkleEnv(gym.Env):
             self._dice_locked[i] += lock
 
     def _helper_flip_lock(self, string, dice_values, dice_locked):
-    """
-    returns a new array of which dice are locked after the player has attempted to lock a combination of dice
+        """
+        returns a new array of which dice are locked after the player has attempted to lock a combination of dice
 
-    Parameters
-    ----------
-    string: string
-        a string indicating the values of the dice the player is trying to lock
-    dice_values: array-like
-        an array of integers indicating the value of each die in each position
-    dice_locked: array-like
-        0 if the die is unlocked, 1 otherwise
+        Parameters
+        ----------
+        string: string
+            a string indicating the values of the dice the player is trying to lock
+        dice_values: array-like
+            an array of integers indicating the value of each die in each position
+        dice_locked: array-like
+            0 if the die is unlocked, 1 otherwise
 
-    Returns
-    -------
-    new_locked: array-like
-        0 if the die was previously locked, but we are unlocking it by redeeming some combination of points, 1 otherwise
-    """
+        Returns
+        -------
+        new_locked: array-like
+            0 if the die was previously locked, but we are unlocking it by redeeming some combination of points, 1 otherwise
+        """
         new_locked = [x for x in dice_locked]
         for char in string:
             x = int(char)
@@ -166,14 +166,14 @@ class FarkleEnv(gym.Env):
 
     # checks if any player has win, returning the player number if so, -1 otherwise
     def _check_win(self):
-    """
-    checks if a player has won
+        """
+        checks if a player has won
 
-    Returns
-    -------
-    int
-        the player number if somebody has won, -1 otherwise
-    """
+        Returns
+        -------
+        int
+            the player number if somebody has won, -1 otherwise
+        """
         for i, points in enumerate(self._player_points):
             if points > self.max_points:
                 return i
@@ -181,21 +181,21 @@ class FarkleEnv(gym.Env):
 
 
     def calculate_points(self, dice_values, dice_locked):
-    """
-    checks how many points a player obtained with the dice they locked
+        """
+        checks how many points a player obtained with the dice they locked
 
-    Parameters
-    ---------
-    dice_values: array-like 
-        the value of each die
-    dice_locked: array-like
-        indicates if a die is locked or not
+        Parameters
+        ---------
+        dice_values: array-like 
+            the value of each die
+        dice_locked: array-like
+            indicates if a die is locked or not
 
-    Returns
-    -------
-    max_points: integer
-        the amount of points scored by the player's lock actions
-    """
+        Returns
+        -------
+        max_points: integer
+            the amount of points scored by the player's lock actions
+        """
         # TODO: check_farkle and check_legal lock can also be implemented here (for game functionality)
             # just check if points == 0 and if so, the player farkled?
         # TODO: add to check legal lock that valid combinations are locked!
@@ -223,21 +223,21 @@ class FarkleEnv(gym.Env):
         return max_points
 
     def check_farkle(self, dice_values, dice_locked):
-    """
-    checks if a player has farkled
+        """
+        checks if a player has farkled
 
-    Parameters
-    ---------
-    dice_values: array-like 
-        the value of each die
-    dice_locked: array-like
-        indicates if a die is locked or not
+        Parameters
+        ---------
+        dice_values: array-like 
+            the value of each die
+        dice_locked: array-like
+            indicates if a die is locked or not
 
-    Returns
-    -------
-    bool
-        True is the player farkled
-    """
+        Returns
+        -------
+        bool
+            True is the player farkled
+        """
         # return True if player farkled, return False otherwise
         # TODO: use self._dice_values or allow parameter to be passed in?
         # TODO: use calculate_points for this?
@@ -258,23 +258,23 @@ class FarkleEnv(gym.Env):
         return True
 
     def step(self, action):
-    """
-    step is a function to implement Gymnasium's environment API
+        """
+        step is a function to implement Gymnasium's environment API
 
-    Parameters
-    ---------
-    action: dict
-        contains "lock": an array-like with a 1 in each index where the player would like to lock the dice,
-                 "bank": a boolean indicating if the player is banking after this turn
+        Parameters
+        ---------
+        action: dict
+            contains "lock": an array-like with a 1 in each index where the player would like to lock the dice,
+                     "bank": a boolean indicating if the player is banking after this turn
 
-    Returns
-    -------
-    observation: dict
-        contains "dice_values": an array-like with integer elements indicating the new value of each die
-                 "dice_locked": an array-like with a 1 in each index where a die is locked
-                 "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
-                 "turn": an integer indicating who's turn it is
-    """
+        Returns
+        -------
+        observation: dict
+            contains "dice_values": an array-like with integer elements indicating the new value of each die
+                     "dice_locked": an array-like with a 1 in each index where a die is locked
+                     "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
+                     "turn": an integer indicating who's turn it is
+        """
         terminated = False
         # TODO: calculate points
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
@@ -303,6 +303,7 @@ class FarkleEnv(gym.Env):
         reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
+        # TODO: add points this turn to info or observation?
         
         return observation, reward, terminated, truncated, info
             
