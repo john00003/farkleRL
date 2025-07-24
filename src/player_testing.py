@@ -10,7 +10,7 @@ class RLAgent:
     def play(self, observation):
         pass
 
-    def update(self, reward, terminated, truncated, info):
+    def update(self, reward):
         pass
 
 
@@ -23,5 +23,5 @@ class RandomPlayer:
     def play(self, observation):
         pass
 
-    def update(self, reward, terminated, truncated, info):
+    def update(self, reward):
         pass
