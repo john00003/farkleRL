@@ -257,6 +257,20 @@ class FarkleEnv(gym.Env):
                         return False # the player did not farkle, there is at least one redeemable combination
         return True
 
+    def check_legal(self, action):
+        """
+        checks if a player's action is legal
+        """
+        try:
+            self.check_lock_legal(action.lock)
+        except AssertionError:
+            return False
+
+        if action.bank and (self._player_points[self._turn] + self._points_this_turn < 500):
+            return False
+
+        return True
+
     def step(self, action):
         """
         step is a function to implement Gymnasium's environment API
@@ -289,6 +303,7 @@ class FarkleEnv(gym.Env):
 
         hot_dice = self._check_hot_dice(self._dice_locked)
 
+        # this call to check farkle cannot be legal. plus, the environment already checked if the player farkled before the agent made any actions
         if self.check_farkle(self._dice_values, action["lock"]):
             assert points == 0
             self._points_this_turn = 0

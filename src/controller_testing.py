@@ -26,6 +26,9 @@ class FarkleController:
     def _new_game(self,seed):
         return self._env.reset(seed)
 
+    def check_legal(self, action):
+        return env.check_legal(action)
+
     def play_turn(self, player, observation, info):
         """
         play one player's turn, moving to the next player's turn 
@@ -34,7 +37,8 @@ class FarkleController:
         #     # do not update, just return
         reward_this_turn = 0
         player_num = observation.turn
-
+        truncated = False
+        terminated = False
 
         while(observation.turn == player_num and not truncated and not terminated): # until we move to next player
             lock, bank = player.play(observation) # prompt current player to play
@@ -51,7 +55,10 @@ class FarkleController:
         play an entire game
         """
         observation, info = self._new_game(seed)
-        while info.winner == -1: # while game is not over TODO: consider truncated or terminated?
+        truncated = False
+        terminated = False
+
+        while info.winner == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
             current_player = observation.turn
             observation, reward, terminated, truncated, info = play_turn(self.players[observation.turn], observation, info)
 
@@ -60,5 +67,9 @@ class FarkleController:
 
 
 if __name__ == "__main__":
+    players = [RandomPlayer()]
+    env = FarkleEnv()
+    game = FarkleController(env, players)
+    game.play_game()
     print("what")
 
