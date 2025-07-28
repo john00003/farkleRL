@@ -39,6 +39,32 @@ def get_legal_lock_combinations(observation):
 
     return combinations
 
+def choose_random_action(observation):
+    """
+    this function selects a random action for the agent
+
+    Paramaters
+    ----------
+    observation: dict
+        and observation of the FarkleEnv
+
+    Returns
+    -------
+    choice: array-like
+        the selection of dice to lock, or an empty array if the decision to bank was made or it is not legal to lock anything
+    """
+    # TODO: this could be bad, if random player had farkled, and coukd not bank, and was prompted to make a turn, they would query random actions forever while checking if they are legal!!!!
+    bank = np.random.choice([True, False])
+
+    if not bank:
+        try:
+            choice = np.random.choice(get_legal_lock_combinations(observation))
+        except ValueError:
+            return []
+    else:
+        choice = []
+    
+    return choice
 class RLAgent:
 
     def __init__(self):
