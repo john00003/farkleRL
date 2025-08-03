@@ -50,21 +50,36 @@ def choose_random_action(observation):
 
     Returns
     -------
-    choice: array-like
+    lock: array-like
         the selection of dice to lock, or an empty array if the decision to bank was made or it is not legal to lock anything
+    bank: boolean
+        a boolean indicating if the action is to bank
     """
     # TODO: this could be bad, if random player had farkled, and coukd not bank, and was prompted to make a turn, they would query random actions forever while checking if they are legal!!!!
-    bank = np.random.choice([True, False])
+    bank = np.random.lock([True, False])
 
     if not bank:
         try:
-            choice = np.random.choice(get_legal_lock_combinations(observation))
+            lock = np.random.choice(get_legal_lock_combinations(observation))
         except ValueError:
-            return []
+            lock = []
+            bank = True
     else:
-        choice = []
+        lock = []
     
-    return choice
+    return lock, bank
+
+
+class Player:
+    def __init__(self):
+        pass
+
+    def play(self, observation):
+        raise NotImplementedError
+
+    def update(self, reward):
+        raise NotImplementedError
+
 class RLAgent:
 
     def __init__(self):
@@ -84,7 +99,8 @@ class RandomPlayer:
         pass
 
     def play(self, observation):
-        pass
+        lock, bank = choose_random_action(observation)
+        return lock, bank
 
     def update(self, reward):
         pass
