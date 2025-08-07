@@ -52,10 +52,6 @@ class FarkleEnv(gym.Env):
         # set combinations to reduce runtime getting it in the future
         self.combinations = self._get_combinations()
 
-        # TODO: use object oriented dice? or dice completely contained within environment?
-            # can you do that with gym?
-
-
         # observation space of environment
             # value of each die
             # bool for each die - True if locked, False otherwise
@@ -137,7 +133,7 @@ class FarkleEnv(gym.Env):
     def _hot_dice(self):
         # partially reset private representation of dice
         # do not change turn or reset points_this_turn
-        self._dice_values = self.observation_space["dice_values"].sample() # TODO: yes sample but we shouldn't force the player to roll
+        self._dice_values = self.observation_space["dice_values"].sample()
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
 
     def check_lock_legal(self, lock_action):
@@ -231,7 +227,6 @@ class FarkleEnv(gym.Env):
                         current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) #TODO: does this work?
                         max_points = max(current_points, max_points)
 
-        
         return max_points
 
     def check_farkle(self, dice_values, dice_locked):
@@ -317,13 +312,18 @@ class FarkleEnv(gym.Env):
 
         farkle = False
         terminated = False
+        truncated = False
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
         self._points_this_turn += points
 
         if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
             terminated = True
             self._player_points[self._turn] += self._points_this_turn
-            pass    # TODO: handle win
+            reward = 0
+            observation = self._get_obs()
+            info = self._get_info()
+            
+            return observation, reward, terminated, truncated, info
         else:
             terminated = False
 
