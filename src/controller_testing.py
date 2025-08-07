@@ -58,6 +58,7 @@ class FarkleController:
         truncated = False
         terminated = False
 
+        # TODO: important for controller not to determine who is next to play. let FarkleEnv and observation tell us who is next to play (in case of b2b farkles)
         while info.winner == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
             current_player = observation.turn
             observation, reward, terminated, truncated, info = play_turn(self.players[observation.turn], observation, info)

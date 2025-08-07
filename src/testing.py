@@ -115,16 +115,28 @@ class FarkleEnv(gym.Env):
     # this is called to partially reset the environment state when a player ends their turn
     def _new_round(self):
         # partially reset private representation of the game
-        self._dice_values = self.observation_space["dice_values"].sample()
-        self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
-        self._points_this_turn = 0
-        self._turn = (self._turn + 1) % self.players
+        # if next player farkles off the bat, move to next player's turn
+        while True:
+            self._dice_values = self.observation_space["dice_values"].sample()
+            self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
+            self._points_this_turn = 0
+            self._turn = (self._turn + 1) % self.players
+            if not self.check_farkle(self._dice_values, self._dice_locked):
+                break
+
+    def _roll_unlocked_dice(self):
+        """
+        rolls the dice that are unlocked
+        """
+        new_values = self.observation_space["dice_values"].sample()
+        self._dice_values[self._dice_locked == 0] = new_values[self.dice_locked == 0]   # replace old dice values with new dice values in all indices where the dice are unlocked
 
     def _check_hot_dice(self, dice_locked):
         return np.all(dice_locked == 1)
 
     def _hot_dice(self):
         # partially reset private representation of dice
+        # do not change turn or reset points_this_turn
         self._dice_values = self.observation_space["dice_values"].sample() # TODO: yes sample but we shouldn't force the player to roll
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
 
@@ -180,7 +192,7 @@ class FarkleEnv(gym.Env):
         return -1
 
 
-    def calculate_points(self, dice_values, dice_locked):
+    def calculate_points(self, dice_values, lock_action):
         """
         checks how many points a player obtained with the dice they locked
 
@@ -188,8 +200,8 @@ class FarkleEnv(gym.Env):
         ---------
         dice_values: array-like 
             the value of each die
-        dice_locked: array-like
-            indicates if a die is locked or not
+        lock_action: array-like
+            indicates which dice the player locked this turn
 
         Returns
         -------
@@ -203,7 +215,7 @@ class FarkleEnv(gym.Env):
 
         locked = []
         num_locked = 0
-        for lock, die in zip(dice_locked, dice_values):
+        for lock, die in zip(lock_action, dice_values):
             if lock:
                 locked.append(die)
                 num_locked += 1
@@ -216,7 +228,7 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         current_points = dict[key]
-                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, dice_locked)) #TODO: does this work?
+                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) #TODO: does this work?
                         max_points = max(current_points, max_points)
 
         
@@ -289,8 +301,22 @@ class FarkleEnv(gym.Env):
                      "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
                      "turn": an integer indicating who's turn it is
         """
+        # TODO: okay absolutely under no circumstances do you prompt the player for action if they farkled
+            # can we add info for controller to read - perhaps if current player farkled due to this turn, we need to indicate to controller that it is next player's turn
+            # but what to do if upon rolling initial dice for next player, the next player farkles as well?
+                # well, thankfully we don't need to give any reward for that. other player that farkled did not necessarily "take an action"
+                    # just do a while loop, new round until no more farkling!
+        # TODO: we need to reroll remaining dice in this function somewhere
+        assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
+        assert self.check_legal(action)
+        assert not self.check_farkle(self._dice_values, self._dice_locked)
+
+        if not action["bank"]:
+            # no need to update the locks if player is banking
+            self._update_locks(action["lock"])
+
+        farkle = False
         terminated = False
-        # TODO: calculate points
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
         self._points_this_turn += points
 
@@ -302,20 +328,31 @@ class FarkleEnv(gym.Env):
             terminated = False
 
         hot_dice = self._check_hot_dice(self._dice_locked)
+        if not action["bank"]:
+            if not hot_dice:
+                self._roll_unlocked_dice() # we
+            else:
+                self._hot_dice()
+            # in both of these cases, player may have farkled
+            if self.check_farkle(self._dice_values, self._dice_locked):
+                # player farkled, give them negative reward
+                self._new_round()
+                farkle = True
 
         # this call to check farkle cannot be legal. plus, the environment already checked if the player farkled before the agent made any actions
-        if self.check_farkle(self._dice_values, action["lock"]):
-            assert points == 0
-            self._points_this_turn = 0
-            self._new_round()
-        elif action["bank"]:
+        # and we are passing only the dice that the player LOCKED THIS TURN to check farkle, when we should be passing (prev locked die OR die locked this turn)
+        # if self.check_farkle(self._dice_values, action["lock"]):
+        #     assert points == 0
+        #     self._points_this_turn = 0
+            # self._new_round()
+        #elif action["bank"]:
+        if action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
-            if hot_dice:
-                self._hot_dice()
-            else:
-                self._new_round() # only do new round if the player banked
+            self._new_round() # only do new round if the player banked
 
-        reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
+        reward = 0 if (terminated or truncated or (not action["bank"] and not farkle) else -1
+        #reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
+        print(reward)   #confirm that reward is correct
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         # TODO: add points this turn to info or observation?
