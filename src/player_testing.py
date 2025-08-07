@@ -89,7 +89,7 @@ def choose_random_action(observation):
                 lock = None
                 bank = None
     else:
-        if check_bang_legal(observation):
+        if check_bank_legal(observation):
             lock = []
         else:
             try:
@@ -147,4 +147,5 @@ class RandomPlayer(Player):
         return lock, bank
 
     def update(self, reward):
+        # no need to update, this player is not an RL agent
         pass

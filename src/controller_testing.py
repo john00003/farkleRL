@@ -23,7 +23,7 @@ class FarkleController:
         self.players = players
         self.agent_player_num = agent_player_num # TODO: can we get rid of this?
 
-    def _new_game(self,seed):
+    def _new_game(self, seed):
         return self._env.reset(seed)
 
     def check_legal(self, action):
@@ -46,6 +46,7 @@ class FarkleController:
             observation, reward, terminated, truncated, info = env.step(action)
             reward_this_turn += reward
 
+        # TODO: update player with reward after every action, or after all actions?
         player.update(reward_this_turn)
 
         return observation, reward, terminated, truncated, info
@@ -72,5 +73,4 @@ if __name__ == "__main__":
     env = FarkleEnv()
     game = FarkleController(env, players)
     game.play_game()
-    print("what")
 

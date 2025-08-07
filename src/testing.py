@@ -322,7 +322,6 @@ class FarkleEnv(gym.Env):
             reward = 0
             observation = self._get_obs()
             info = self._get_info()
-            
             return observation, reward, terminated, truncated, info
         else:
             terminated = False
@@ -356,7 +355,7 @@ class FarkleEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         # TODO: add points this turn to info or observation?
-        
+        assert not info.farkle
         return observation, reward, terminated, truncated, info
             
 # register environment
@@ -366,5 +365,3 @@ register(
     max_episode_steps=500, # TODO: check if problem
     )
 
-if __name__ == "__main__":
-    print("hello")
