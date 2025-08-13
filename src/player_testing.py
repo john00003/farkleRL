@@ -23,7 +23,7 @@ def get_legal_lock_combinations(observation):
         if not lock:
             unlocked.append(die)
             unlocked_indices.append(i)
-            num_unlocked++
+            num_unlocked += 1
     # sort the unlocked dice, but maintain order of indices of those dice
     order = sorted(range(len(unlocked)), key=lambda i: unlocked[i])
     unlocked = [unlocked[i] for i in order]
@@ -53,7 +53,7 @@ def check_bank_legal(observation):
     boolean
         a boolean indicating if the player can legally bank
     """
-    if observation.player_points + observation.points_this_turn >= 500:
+    if observation["player_points"] + observation["points_this_turn"] >= 500:
         return True
     return False
 
@@ -76,7 +76,7 @@ def choose_random_action(observation):
     # TODO: this could be bad, if random player had farkled, and coukd not bank, and was prompted to make a turn, they would query random actions forever while checking if they are legal!!!!
         # where is player being prompted for legal action in while loop?
     # TODO: this method only gets legal combinations to lock, but has no way of checking if it is legal to bank
-    bank = np.random.lock([True, False])
+    bank = np.random.choice([True, False])
 
     if not bank:
         try:

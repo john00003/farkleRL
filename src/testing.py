@@ -6,7 +6,6 @@ from gymnasium.envs.registration import register
 # TODO: should we have a singler player environment wrapper? i dont know
 class FarkleEnv(gym.Env):
 
-    combinations = self._get_combinations()
 
     @staticmethod
     def _get_combinations():
@@ -19,17 +18,17 @@ class FarkleEnv(gym.Env):
         sextuples = {"111111": 3000, "222222": 3000, "333333": 3000, "444444": 3000, "555555": 3000, "666666": 3000}
         straight = {"123456": 1500}
 
-        pair_keys = doubles.keys()
+        pair_keys = list(doubles.keys())
         three_pair_keys = [pair_keys[i] + pair_keys[j] + pair_keys[k] for i in range(4) for j in range(i+1, 5) for k in range(j+1, 6)]
         three_pair_value = 1500
         three_pair = dict.fromkeys(three_pair_keys, three_pair_value)
 
-        triple_keys = triples.keys()
+        triple_keys = list(triples.keys())
         two_triple_keys = [triple_keys[i] + triple_keys[j] for i in range(5) for j in range (i+1, 6)]
         two_triple_value = 2500
         two_triple = dict.fromkeys(two_triple_keys, two_triple_value)
 
-        quadruple_keys = quadruples.keys()
+        quadruple_keys = list(quadruples.keys())
         quadruple_and_pair_keys = [pair_keys[i] + quadruple_keys[j] for i in range(5) for j in range(i+1,6)]
         quadruple_and_pair_keys += [quadruple_keys[i] + pair_keys[j] for i in range(5) for j in range(i+1, 6)]
         quadruple_and_pair_value = 1500
@@ -38,6 +37,8 @@ class FarkleEnv(gym.Env):
         all_combinations = {1:[singles], 2:[], 3:[triples], 4:[quadruples], 5:[quintuples], 6:[sextuples, two_triple, quadruple_and_pair, straight, three_pair]} # exclude doubles because we never want to take doubles, and they don't count unless in combination with others
 
         return all_combinations
+    
+    combinations = _get_combinations()
 
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
@@ -50,7 +51,7 @@ class FarkleEnv(gym.Env):
         # number of points to win the game
         self.max_points = max_points
         # set combinations to reduce runtime getting it in the future
-        self.combinations = self._get_combinations()
+        #self.combinations = self._get_combinations()
 
         # observation space of environment
             # value of each die
@@ -59,7 +60,7 @@ class FarkleEnv(gym.Env):
             # amount of points the player has scored already in their turn
         self.observation_space = gym.spaces.Dict(
             {
-                "dice_values": gym.spaces.Discrete(6, start=1, shape=(self.dice,), dtype=int, seed=random_seed),
+                "dice_values": gym.spaces.MultiDiscrete([6]*self.dice, seed=random_seed, start=[1]*self.dice),
                 "dice_locked": gym.spaces.MultiBinary(self.dice),
                 "player_points": gym.spaces.Box(0, max_points, shape=(self.players,), dtype=int),
                 "points_this_turn": gym.spaces.Box(0, max_points, dtype=int)
@@ -253,9 +254,10 @@ class FarkleEnv(gym.Env):
         for lock, die in zip(dice_locked, dice_values):
             if not lock:
                 unlocked.append(die)
-                num_unlocked++
+                num_unlocked += 1
 
         unlocked.sort()
+        unlocked = [str(x) for x in unlocked]
         string = "".join(unlocked)
         for i in range(1, num_unlocked+1):
             for dict in FarkleEnv.combinations[i]:
@@ -349,7 +351,7 @@ class FarkleEnv(gym.Env):
             self._player_points[self._turn] += self._points_this_turn
             self._new_round() # only do new round if the player banked
 
-        reward = 0 if (terminated or truncated or (not action["bank"] and not farkle) else -1
+        reward = 0 if (terminated or truncated or (not action["bank"] and not farkle)) else -1
         #reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
         print(reward)   #confirm that reward is correct
         observation = self._get_obs()

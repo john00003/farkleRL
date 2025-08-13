@@ -23,7 +23,7 @@ class FarkleController:
         self.players = players
         self.agent_player_num = agent_player_num # TODO: can we get rid of this?
 
-    def _new_game(self, seed):
+    def _new_game(self, seed = None):
         return self._env.reset(seed)
 
     def check_legal(self, action):
@@ -36,11 +36,11 @@ class FarkleController:
         # if info.farkle: # PLAYER CAN DO ANYTHING< LET STEP HANDLE THIS
         #     # do not update, just return
         reward_this_turn = 0
-        player_num = observation.turn
+        player_num = observation["turn"]
         truncated = False
         terminated = False
 
-        while(observation.turn == player_num and not truncated and not terminated): # until we move to next player
+        while(observation["turn"] == player_num and not truncated and not terminated): # until we move to next player
             lock, bank = player.play(observation) # prompt current player to play
             action = {"lock": lock, "bank": bank}
             observation, reward, terminated, truncated, info = env.step(action)
@@ -51,26 +51,28 @@ class FarkleController:
 
         return observation, reward, terminated, truncated, info
         
-    def play_game(self, seed):
+    def play_game(self, seed = None):
         """
         play an entire game
         """
         observation, info = self._new_game(seed)
+        print(observation)
+        print(info)
         truncated = False
         terminated = False
 
         # TODO: important for controller not to determine who is next to play. let FarkleEnv and observation tell us who is next to play (in case of b2b farkles)
-        while info.winner == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
-            current_player = observation.turn
-            observation, reward, terminated, truncated, info = play_turn(self.players[observation.turn], observation, info)
+        while info["winner"] == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
+            current_player = observation["turn"]
+            observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info)
 
-        print(f"Winner is player {info.winner}!")
+        print(f"Winner is player {info["winner"]}!")
         return
 
 
 if __name__ == "__main__":
-    players = [RandomPlayer()]
-    env = FarkleEnv()
+    players = [player_testing.RandomPlayer()]
+    env = testing.FarkleEnv()
     game = FarkleController(env, players)
     game.play_game()
 
