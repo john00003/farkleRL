@@ -10,36 +10,44 @@ class FarkleEnv(gym.Env):
     @staticmethod
     def _get_combinations():
 
-        singles = {"1": 100, "5": 50}
-        doubles = {"11": 0, "22": 0, "33": 0, "44": 0, "55": 0, "66": 0} # a set, since pairs alone are worth nothing
-        triples = {"111": 300, "222": 200, "333": 300, "444": 400, "555": 500, "666": 600}
-        quadruples = {"1111": 1000, "2222": 1000, "3333": 1000, "4444": 1000, "5555": 1000, "6666": 1000} # a set, since quadruples are worth the same
-        quintuples = {"11111": 2000, "22222": 2000, "33333": 2000, "44444": 2000, "55555": 2000, "66666": 2000}
-        sextuples = {"111111": 3000, "222222": 3000, "333333": 3000, "444444": 3000, "555555": 3000, "666666": 3000}
-        straight = {"123456": 1500}
+        # singles
+        all_combinations = {(0, 0, 0, 0, 0, 1) : 100, (0, 0, 0, 0, 0, 5) : 50}
 
-        pair_keys = list(doubles.keys())
-        three_pair_keys = [pair_keys[i] + pair_keys[j] + pair_keys[k] for i in range(4) for j in range(i+1, 5) for k in range(j+1, 6)]
-        three_pair_value = 1500
-        three_pair = dict.fromkeys(three_pair_keys, three_pair_value)
+        for i in range(1, 7):
+            # 3, 4, 5, 6 of same kind
+            all_combinations[(0, 0, 0, i, i, i)] = i * 100 if i > 1 else 300
+            all_combinations[(0, 0, i, i, i, i)] = 1000
+            all_combinations[(0, i, i, i, i, i)] = 2000
+            all_combinations[(i, i, i, i, i, i)] = 3000
+            
+            for j in range(i + 1, 7):
+                for k in range(j + 1, 7):
+                    # three pairs
+                    all_combinations[(i, i, j, j, k, k)] = 1500
 
-        triple_keys = list(triples.keys())
-        two_triple_keys = [triple_keys[i] + triple_keys[j] for i in range(5) for j in range (i+1, 6)]
-        two_triple_value = 2500
-        two_triple = dict.fromkeys(two_triple_keys, two_triple_value)
 
-        quadruple_keys = list(quadruples.keys())
-        quadruple_and_pair_keys = [pair_keys[i] + quadruple_keys[j] for i in range(5) for j in range(i+1,6)]
-        quadruple_and_pair_keys += [quadruple_keys[i] + pair_keys[j] for i in range(5) for j in range(i+1, 6)]
-        quadruple_and_pair_value = 1500
-        quadruple_and_pair = dict.fromkeys(quadruple_and_pair_keys, quadruple_and_pair_value)
+        for i in range(1, 7):
+            for j in range(1, 7):
 
-        all_combinations = {1:[singles], 2:[], 3:[triples], 4:[quadruples], 5:[quintuples], 6:[sextuples, two_triple, quadruple_and_pair, straight, three_pair]} # exclude doubles because we never want to take doubles, and they don't count unless in combination with others
+                # four of a kind and pair
+                temp = tuple(sorted([i, i, i, i, j, j]))
+
+                if temp not in all_combinations:
+                    all_combinations[temp] = 1500
+
+                if j < i or i == j:
+                    continue
+                #two triplets
+                temp = (i, i, i, j, j, j)
+
+                if temp not in all_combinations:
+                    all_combinations[temp] = 2500
+
+        # straight
+        all_combinations[(1, 2, 3, 4, 5, 6)] = 1500
 
         return all_combinations
     
-    combinations = _get_combinations()
-
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
             # furthermore, make this extensible to setting where we have multiple agents, not just one
@@ -367,3 +375,7 @@ register(
     max_episode_steps=500, # TODO: check if problem
     )
 
+
+### Add main function to test
+if __name__ == "__main__":
+    test = FarkleEnv._get_combinations()
