@@ -59,7 +59,7 @@ class FarkleEnv(gym.Env):
         # number of points to win the game
         self.max_points = max_points
         # set combinations to reduce runtime getting it in the future
-        #self.combinations = self._get_combinations()
+        self.combinations = self._get_combinations()
 
         # observation space of environment
             # value of each die
@@ -116,6 +116,7 @@ class FarkleEnv(gym.Env):
         info = self._get_info()
 
         return observation, info
+
 
     # this is called to partially reset the environment state when a player ends their turn
     def _new_round(self):
@@ -238,41 +239,23 @@ class FarkleEnv(gym.Env):
 
         return max_points
 
-    def check_farkle(self, dice_values, dice_locked):
+    # Proposol, when die is locked we just set the value to 0
+    def check_farkle(self, dice_values):
         """
         checks if a player has farkled
 
         Parameters
         ---------
-        dice_values: array-like 
+        dice_values: a tupple
             the value of each die
-        dice_locked: array-like
-            indicates if a die is locked or not
-
         Returns
         -------
         bool
             True is the player farkled
         """
-        # return True if player farkled, return False otherwise
-        # TODO: use self._dice_values or allow parameter to be passed in?
-        # TODO: use calculate_points for this?
-        unlocked = []
-        num_unlocked = 0
-        for lock, die in zip(dice_locked, dice_values):
-            if not lock:
-                unlocked.append(die)
-                num_unlocked += 1
 
-        unlocked.sort()
-        unlocked = [str(x) for x in unlocked]
-        string = "".join(unlocked)
-        for i in range(1, num_unlocked+1):
-            for dict in FarkleEnv.combinations[i]:
-                for key in dict.keys():
-                    if key in string:
-                        return False # the player did not farkle, there is at least one redeemable combination
-        return True
+        # If the dice_values are not in the combination ur cooked
+        return dice_values not in self.combinations
 
     def check_legal(self, action):
         """
@@ -378,4 +361,4 @@ register(
 
 ### Add main function to test
 if __name__ == "__main__":
-    test = FarkleEnv._get_combinations()
+    test = FarkleEnv()
