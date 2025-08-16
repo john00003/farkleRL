@@ -33,3 +33,4 @@
 
 # Virtual Enviroments
 env/**
+./env
