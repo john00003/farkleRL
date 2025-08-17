@@ -9,6 +9,17 @@ class FarkleEnv(gym.Env):
 
     @staticmethod
     def _get_combinations():
+        """
+        Returns all valid scoring combinations in Farkle.
+    
+        Returns
+        -------
+        dict[int, list[dict[str, int]]]
+            Dictionary mapping number of dice in a combination to 
+            a list of scoring rule dictionaries. Each dictionary maps
+            a *sorted* string representation of dice values (e.g., "111") to 
+            the corresponding score.
+        """
 
         singles = {"1": 100, "5": 50}
         doubles = {"11": 0, "22": 0, "33": 0, "44": 0, "55": 0, "66": 0} # a set, since pairs alone are worth nothing
@@ -86,11 +97,35 @@ class FarkleEnv(gym.Env):
         )
 
     def _get_obs(self):
+        """
+        Get the current observation of the game state.
+    
+        Returns
+        -------
+        dict
+            Dictionary with keys:
+            - "dice_values": array of current die values
+            - "dice_locked": array indicating locked dice
+                0 if the corresponding dice is unlocked, 1 otherwise
+            - "player_points": array of each player's total points
+            - "turn": index of the current player's turn
+            - "points_this_turn": points accumulated by the active player this turn
+        """
         return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points, "turn": self._turn, "points_this_turn": self._points_this_turn}
 
     def _get_info(self):
+        """
+        Returns additional info about the current state.
+    
+        Returns
+        -------
+        dict
+            Contains:
+            - "farkle": bool, whether current dice state is a Farkle
+            - "winner": int, index of winning player if any, else -1
+        """
         return {
-            "farkle": self.check_farkle(self._dice_values, self._dice_locked),
+            "farkle": self.check_farkle(self._dice_values, self._dice_locked), # TODO: this does not currently correctly return if the player farkled. no point, since the next player doesn't need this info
             "winner": self._check_win(),
         }
 
@@ -123,12 +158,25 @@ class FarkleEnv(gym.Env):
 
     def _roll_unlocked_dice(self):
         """
-        rolls the dice that are unlocked
+        Reroll all dice that are not locked, updating their values in place.
         """
         new_values = self.observation_space["dice_values"].sample()
         self._dice_values[self._dice_locked == 0] = new_values[self._dice_locked == 0]   # replace old dice values with new dice values in all indices where the dice are unlocked
 
     def _check_hot_dice(self, dice_locked):
+        """
+        Checks if all dice are locked ("hot dice").
+    
+        Parameters
+        ----------
+        dice_locked : array-like
+            Binary array of locked dice. 0 in indices where the corresponding dice is unlocked, 1 otherwise
+    
+        Returns
+        -------
+        bool
+            True if all dice are locked, False otherwise.
+        """
         return np.all(dice_locked == 1)
 
     def _hot_dice(self):
@@ -141,7 +189,7 @@ class FarkleEnv(gym.Env):
         lock_action = action["lock"]
         assert len(lock_action) == self.dice
         for lock, already_locked in zip(lock_action, self._dice_locked):
-            assert (already_locked > lock) or (already_locked == 0)    # if die was already locked, assert player is not trying to lock it again.
+            assert not (already_locked == 1 and lock == 1)
 
         if not all(x == 0 for x in lock_action):    # if the player is locking anything, make sure it's valid
             assert self.verify_combo(self._dice_values, lock_action)
@@ -212,6 +260,7 @@ class FarkleEnv(gym.Env):
             the value of each die
         lock_action: array-like
             indicates which dice the player locked this turn
+            0 in indices where the corresponding dice is unlocked, 1 otherwise
 
         Returns
         -------
@@ -256,6 +305,7 @@ class FarkleEnv(gym.Env):
             the value of each die
         lock_action: array-like
             indicates which dice the player locked this turn
+            0 in indices where the corresponding dice is unlocked, 1 otherwise
 
         Returns
         -------
@@ -277,9 +327,10 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         new_lock_action = self._helper_flip_lock(key, dice_values, lock_action)
-                        if all(x == 0 for x in lock_action):
+                        if all(x == 0 for x in new_lock_action):
                             return True
-                        self.verify_combo(dice_values, new_lock_action) # if the currently found combination does not account for all the locked die, maybe this combination and some other with the remaining dice will
+                        if self.verify_combo(dice_values, new_lock_action): # if the currently found combination does not account for all the locked die, maybe this combination and some other with the remaining dice will
+                            return True
 
         return False
 
@@ -293,6 +344,7 @@ class FarkleEnv(gym.Env):
             the value of each die
         dice_locked: array-like
             indicates if a die is locked or not
+            0 in indices where the corresponding dice is unlocked, 1 otherwise
 
         Returns
         -------
@@ -354,13 +406,6 @@ class FarkleEnv(gym.Env):
                      "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
                      "turn": an integer indicating who's turn it is
         """
-        # TODO: okay absolutely under no circumstances do you prompt the player for action if they farkled
-            # can we add info for controller to read - perhaps if current player farkled due to this turn, we need to indicate to controller that it is next player's turn
-            # but what to do if upon rolling initial dice for next player, the next player farkles as well?
-                # well, thankfully we don't need to give any reward for that. other player that farkled did not necessarily "take an action"
-                    # just do a while loop, new round until no more farkling!
-        # TODO: we need to reroll remaining dice in this function somewhere
-        print(self._get_obs())
         assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
@@ -395,19 +440,11 @@ class FarkleEnv(gym.Env):
                 self._new_round()
                 farkle = True
 
-        # this call to check farkle cannot be legal. plus, the environment already checked if the player farkled before the agent made any actions
-        # and we are passing only the dice that the player LOCKED THIS TURN to check farkle, when we should be passing (prev locked die OR die locked this turn)
-        # if self.check_farkle(self._dice_values, action["lock"]):
-        #     assert points == 0
-        #     self._points_this_turn = 0
-            # self._new_round()
-        #elif action["bank"]:
         if action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
             self._new_round() # only do new round if the player banked
 
         reward = 0 if (terminated or truncated or (not action["bank"] and not farkle)) else -1
-        #reward = 0 if (terminated or (not action["bank"] and not farkle) or (action["bank"] and hot_dice)) else -1    # give -1 for every round until you win
         print(reward)   #confirm that reward is correct
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
