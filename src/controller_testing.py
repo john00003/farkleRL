@@ -29,6 +29,9 @@ class FarkleController:
     def check_legal(self, action):
         return env.check_legal(action)
 
+    def check_lock_legal(self, action):
+        return env.check_lock_legal(action)
+
     def play_turn(self, player, observation, info):
         """
         play one player's turn, moving to the next player's turn 
@@ -77,8 +80,10 @@ class FarkleController:
 
 
 if __name__ == "__main__":
-    players = [player_testing.RandomPlayer()]
+    players = [player_testing.ManualPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
+    for player in players:
+        player.set_controller(game)
     game.play_game()
 

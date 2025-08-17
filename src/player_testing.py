@@ -130,6 +130,11 @@ def check_bank_legal(observation):
         return True
     return False
 
+def check_lock_legal(action, controller):
+    action = {"lock": action, "bank": False}
+    controller.check_lock_legal(action)
+
+
 def convert_lock_indices_to_list(indices, observation):
     lock = np.zeros(len(observation["dice_values"]))
     lock[indices] = 1
@@ -187,7 +192,11 @@ def choose_random_action(observation):
 
 class Player:
     def __init__(self):
+        self.controller = None
         pass
+ 
+    def set_controller(self, controller):
+        self.controller = controller
 
     def play(self, observation):
         """
@@ -231,6 +240,72 @@ class RandomPlayer(Player):
         print("player is selecting:")
         print(lock)
         print(bank)
+        return lock, bank
+
+    def update(self, reward):
+        # no need to update, this player is not an RL agent
+        pass
+
+
+class ManualPlayer(Player):
+    def __init__(self):
+        pass
+
+    def _get_bank_input(self):
+        while True:
+            bank = input("bank? (y/N)")
+            if bank == "yes" or bank == "y" or bank == "Yes" or bank == "YES" or bank == "Y":
+                bank = True
+                return bank
+            
+            # check for good input
+            if bank.strip() != "" and bank != "no" and bank != "n" and bank != "No" and bank != "NO" and bank != "N":
+                print("Error: Select y/N to bank")
+            else:
+                bank = False
+                return bank
+
+    def _get_lock_input(self, observation):
+        while True:
+            lock = input("dice to lock?")
+            if len(lock) != len(observation["dice_values"]):
+                print("Error: string of dice to lock must be of same length as total dice")
+                continue
+
+            illegal = False 
+            for x in lock:
+                if x != "1" and x != "0":
+                    print("Error: string of dice to lock must consist of '1' in the places of dice to lock, and '0' in all other places")
+                    illegal = True
+                    break
+            if illegal:
+                continue
+
+            return lock
+
+    def _get_action_ensure_legal(self, observation):
+        while True:
+            bank = self._get_bank_input()
+
+            if bank:
+                if not check_bank_legal(observation):
+                    print("Error: illegal to bank")
+                    continue
+                lock = np.zeros(len(observation["dice_values"]))
+                return lock, bank
+            
+            lock = self._get_lock_input(observation)
+            lock = [int(x) for x in lock]
+            if not check_lock_legal(lock, self.controller):
+                print("Error: illegal to lock these dice")
+                continue
+
+            return lock, bank
+
+
+    def play(self, observation):
+        print(observation)
+        lock, bank = self._get_action_ensure_legal(observation)
         return lock, bank
 
     def update(self, reward):

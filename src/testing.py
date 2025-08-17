@@ -137,10 +137,14 @@ class FarkleEnv(gym.Env):
         self._dice_values = self.observation_space["dice_values"].sample()
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
 
-    def check_lock_legal(self, lock_action):
+    def check_lock_legal(self, action):
+        lock_action = action["lock"]
         assert len(lock_action) == self.dice
         for lock, already_locked in zip(lock_action, self._dice_locked):
             assert (already_locked > lock) or (already_locked == 0)    # if die was already locked, assert player is not trying to lock it again.
+        
+        if not action["bank"]:
+            assert self.calculate_points(self._dice_values, action["lock"]) != 0:
 
     def _update_locks(self, lock_action):
         for i, lock in enumerate(lock_action):
@@ -274,7 +278,7 @@ class FarkleEnv(gym.Env):
         """
         print(action)
         try:
-            self.check_lock_legal(action["lock"])
+            self.check_lock_legal(action)
         except AssertionError:
             print("player attempted to lock illegal dice") 
             return False
