@@ -184,7 +184,7 @@ class FarkleEnv(gym.Env):
             the player number if somebody has won, -1 otherwise
         """
         for i, points in enumerate(self._player_points):
-            if points > self.max_points:
+            if points >= self.max_points:
                 return i
         return -1
 
