@@ -132,7 +132,8 @@ def check_bank_legal(observation):
 
 def check_lock_legal(action, controller):
     action = {"lock": action, "bank": False}
-    controller.check_lock_legal(action)
+    print(f"action being sent to controller {action}")
+    return controller.check_lock_legal(action)
 
 
 def convert_lock_indices_to_list(indices, observation):
@@ -175,7 +176,10 @@ def choose_random_action(observation):
                 bank = None
     else:
         if check_bank_legal(observation):
-            lock = []
+            try:
+                lock = random.choice(get_legal_lock_combinations(observation))
+            except ValueError:
+                lock = []
         else:
             bank = False
             try:
@@ -285,21 +289,19 @@ class ManualPlayer(Player):
 
     def _get_action_ensure_legal(self, observation):
         while True:
-            bank = self._get_bank_input()
-
-            if bank:
-                if not check_bank_legal(observation):
-                    print("Error: illegal to bank")
-                    continue
-                lock = np.zeros(len(observation["dice_values"]))
-                return lock, bank
-            
             lock = self._get_lock_input(observation)
             lock = [int(x) for x in lock]
             if not check_lock_legal(lock, self.controller):
                 print("Error: illegal to lock these dice")
                 continue
 
+            bank = self._get_bank_input()
+
+            if bank:
+                if not check_bank_legal(observation):
+                    print("Error: illegal to bank")
+                    continue
+            
             return lock, bank
 
 

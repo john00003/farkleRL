@@ -142,9 +142,11 @@ class FarkleEnv(gym.Env):
         assert len(lock_action) == self.dice
         for lock, already_locked in zip(lock_action, self._dice_locked):
             assert (already_locked > lock) or (already_locked == 0)    # if die was already locked, assert player is not trying to lock it again.
-        
-        if not action["bank"]:
-            assert self.calculate_points(self._dice_values, action["lock"]) != 0:
+
+        if not all(x == 0 for x in lock_action):    # if the player is locking anything, make sure it's valid
+            assert self.calculate_points(self._dice_values, lock_action) != 0
+
+        return True
 
     def _update_locks(self, lock_action):
         for i, lock in enumerate(lock_action):
@@ -172,7 +174,7 @@ class FarkleEnv(gym.Env):
         for char in string:
             x = int(char)
             for i, value in enumerate(dice_values): # we find a dice of matching value and undo the lock
-                if value == x and dice_locked[i]:
+                if value == x and new_locked[i]:
                     new_locked[i] = 0
                     break
         return new_locked
@@ -318,9 +320,7 @@ class FarkleEnv(gym.Env):
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
 
-        if not action["bank"]:
-            # no need to update the locks if player is banking
-            self._update_locks(action["lock"])
+        self._update_locks(action["lock"])
 
         farkle = False
         terminated = False
