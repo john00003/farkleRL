@@ -126,7 +126,7 @@ def convert_lock_indices_to_list(indices, observation):
     lock[indices] = 1
     return lock
 
-def choose_random_action(observation):
+def choose_random_action(observation, controller):
     """
     this function selects a random action for the agent
 
@@ -150,13 +150,13 @@ def choose_random_action(observation):
     try:
         lock = random.choice(get_legal_lock_combinations(observation))
         lock = convert_lock_indices_to_list(lock, observation)
-    except ValueError:
+    except IndexError:
         lock = np.zeros(len(observation["dice_values"]))
 
-    if not check_bank_legal():
+    if not check_bank_legal(lock, bank, controller):
         bank = False
 
-    if not check_lock_legal():
+    if not check_lock_legal(lock, bank, controller):
         raise Exception("this is probably bad.")
 
     return lock, bank
@@ -207,10 +207,7 @@ class RandomPlayer(Player):
         pass
 
     def play(self, observation):
-        lock, bank = choose_random_action(observation)
-        print("player is selecting:")
-        print(lock)
-        print(bank)
+        lock, bank = choose_random_action(observation, self.controller)
         return lock, bank
 
     def update(self, reward):
