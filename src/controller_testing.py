@@ -24,56 +24,102 @@ class FarkleController:
         self.agent_player_num = agent_player_num # TODO: can we get rid of this?
 
     def _new_game(self, seed = None):
+        """
+        Start a new game in the environment.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        observation : dict
+            Initial observation from the environment.
+        info : dict
+            Additional info returned by the environment.
+        """
         return self._env.reset(seed)
 
     def check_legal(self, action):
-        return env.check_legal(action)
+        return self._env.check_legal(action)
 
     def check_lock_legal(self, action):
         try:
-            return env.check_lock_legal(action)
+            return self._env.check_lock_legal(action)
         except AssertionError:
             return False
 
     def check_bank_legal(self, action):
         try:
-            return env.check_bank_legal(action)
+            return self._env.check_bank_legal(action)
         except AssertionError:
             return False
 
     def play_turn(self, player, observation, info):
         """
-        play one player's turn, moving to the next player's turn 
+        Play a full turn for a given player.
+
+        Parameters
+        ----------
+        player : Player
+            Player object whose turn it is.
+        observation : dict
+            Current observation from the environment.
+        info : dict
+            Additional environment info.
+
+        Returns
+        -------
+        observation : dict
+            Final observation after the player's turn. A dict containing:
+                - "dice_values": array of current die values
+                - "dice_locked": array indicating locked dice
+                    0 if the corresponding dice is unlocked, 1 otherwise
+                - "player_points": array of each player's total points
+                - "turn": index of the current player's turn
+                - "points_this_turn": points accumulated by the active player this turn
+        reward : float
+            Reward obtained during the turn.
+        terminated : bool
+            Whether the episode terminated.
+        truncated : bool
+            Whether the episode was truncated.
+        info : dict
+            Final info dictionary after the turn.
         """
-        # if info.farkle: # PLAYER CAN DO ANYTHING< LET STEP HANDLE THIS
-        #     # do not update, just return
         reward_this_turn = 0
         player_num = observation["turn"]
         truncated = False
         terminated = False
 
         while(observation["turn"] == player_num and not truncated and not terminated): # until we move to next player
-            print(observation)
-            print(info)
             lock, bank = player.play(observation) # prompt current player to play
-            print(lock)
-            print(bank)
             action = {"lock": lock, "bank": bank}
-            observation, reward, terminated, truncated, info = env.step(action)
+            observation, reward, terminated, truncated, info = self._env.step(action)
             reward_this_turn += reward
 
         # TODO: update player with reward after every action, or after all actions?
+            # well, there will be only be one reward, the -1 that we get at the very end of the turn
         player.update(reward_this_turn)
 
         return observation, reward, terminated, truncated, info
         
     def play_game(self, seed = None):
         """
-        play an entire game
+        Play a complete game of Farkle until a winner is determined.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        winner : int
+            Index of the winning player.
         """
         observation, info = self._new_game(seed)
-        print(observation)
-        print(info)
         truncated = False
         terminated = False
 
@@ -84,12 +130,11 @@ class FarkleController:
             current_player = observation["turn"]
             observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info)
 
-        print(f"Winner is player {info["winner"]}!")
-        return
+        print(f"Winner is player {info['winner']}!")
 
 
 if __name__ == "__main__":
-    players = [player_testing.ManualPlayer()]
+    players = [player_testing.RandomPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
     for player in players:
