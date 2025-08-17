@@ -41,7 +41,11 @@ class FarkleController:
         terminated = False
 
         while(observation["turn"] == player_num and not truncated and not terminated): # until we move to next player
+            print(observation)
+            print(info)
             lock, bank = player.play(observation) # prompt current player to play
+            print(lock)
+            print(bank)
             action = {"lock": lock, "bank": bank}
             observation, reward, terminated, truncated, info = env.step(action)
             reward_this_turn += reward
@@ -63,6 +67,8 @@ class FarkleController:
 
         # TODO: important for controller not to determine who is next to play. let FarkleEnv and observation tell us who is next to play (in case of b2b farkles)
         while info["winner"] == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
+            print(observation)
+            print(info)
             current_player = observation["turn"]
             observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info)
 

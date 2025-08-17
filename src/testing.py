@@ -126,7 +126,7 @@ class FarkleEnv(gym.Env):
         rolls the dice that are unlocked
         """
         new_values = self.observation_space["dice_values"].sample()
-        self._dice_values[self._dice_locked == 0] = new_values[self.dice_locked == 0]   # replace old dice values with new dice values in all indices where the dice are unlocked
+        self._dice_values[self._dice_locked == 0] = new_values[self._dice_locked == 0]   # replace old dice values with new dice values in all indices where the dice are unlocked
 
     def _check_hot_dice(self, dice_locked):
         return np.all(dice_locked == 1)
@@ -218,6 +218,7 @@ class FarkleEnv(gym.Env):
                 num_locked += 1
 
         locked.sort()
+        locked = [str(x) for x in locked]
         string = "".join(locked)
         max_points = 0
         for i in range(num_locked, 0, -1):
@@ -225,7 +226,8 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         current_points = dict[key]
-                        current_points += calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) #TODO: does this work?
+                        # TODO: is this supposed to be lock_action or dice_locked????
+                        current_points += self.calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) #TODO: does this work?
                         max_points = max(current_points, max_points)
 
         return max_points
@@ -270,12 +272,15 @@ class FarkleEnv(gym.Env):
         """
         checks if a player's action is legal
         """
+        print(action)
         try:
-            self.check_lock_legal(action.lock)
+            self.check_lock_legal(action["lock"])
         except AssertionError:
+            print("player attempted to lock illegal dice") 
             return False
 
-        if action.bank and (self._player_points[self._turn] + self._points_this_turn < 500):
+        if action["bank"] and (self._player_points[self._turn] + self._points_this_turn < 500):
+            print("player attempted to bank illegally")
             return False
 
         return True
@@ -304,6 +309,7 @@ class FarkleEnv(gym.Env):
                 # well, thankfully we don't need to give any reward for that. other player that farkled did not necessarily "take an action"
                     # just do a while loop, new round until no more farkling!
         # TODO: we need to reroll remaining dice in this function somewhere
+        print(self._get_obs())
         assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
@@ -357,7 +363,7 @@ class FarkleEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         # TODO: add points this turn to info or observation?
-        assert not info.farkle
+        assert not info["farkle"]
         return observation, reward, terminated, truncated, info
             
 # register environment
