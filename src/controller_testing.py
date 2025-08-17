@@ -36,6 +36,9 @@ class FarkleController:
         print(env.check_lock_legal(action))
         return env.check_lock_legal(action)
 
+    def check_bank_legal(self, action):
+        return env.check_bank_legal(action)
+
     def play_turn(self, player, observation, info):
         """
         play one player's turn, moving to the next player's turn 

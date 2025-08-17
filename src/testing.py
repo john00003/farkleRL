@@ -148,6 +148,12 @@ class FarkleEnv(gym.Env):
 
         return True
 
+    def check_bank_legal(self, action):
+        if action["bank"]:
+            assert self._points_this_turn + self._player_points[self._turn] + self.calculate_points(self._dice_values, action["lock"]) >= 500
+
+        return True
+
     def _update_locks(self, lock_action):
         for i, lock in enumerate(lock_action):
             self._dice_locked[i] += lock

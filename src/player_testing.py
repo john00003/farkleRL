@@ -112,29 +112,14 @@ def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
 
     return combinations
 
-def check_bank_legal(observation):
-    """
-    checks if a player is allowed to bank
-
-    Parameters
-    ----------
-    observation: dict
-        and observation of the FarkleEnv
-
-    Returns
-    -------
-    boolean
-        a boolean indicating if the player can legally bank
-    """
-    if observation["player_points"] + observation["points_this_turn"] >= 500:
-        return True
-    return False
-
-def check_lock_legal(action, controller):
-    action = {"lock": action, "bank": False}
+def check_lock_legal(lock, bank, controller):
+    action = {"lock": lock, "bank": bank}
     print(f"action being sent to controller {action}")
     return controller.check_lock_legal(action)
 
+def check_bank_legal(lock, bank, controller):
+    action = {"lock": lock, "bank": bank}
+    return controller.check_bank_legal(action)
 
 def convert_lock_indices_to_list(indices, observation):
     lock = np.zeros(len(observation["dice_values"]))
@@ -162,37 +147,19 @@ def choose_random_action(observation):
     # TODO: this method only gets legal combinations to lock, but has no way of checking if it is legal to bank
     # TODO: check if we still should expect to get ValueError
     bank = np.random.choice([True, False])
+    try:
+        lock = random.choice(get_legal_lock_combinations(observation))
+        lock = convert_lock_indices_to_list(lock, observation)
+    except ValueError:
+        lock = np.zeros(len(observation["dice_values"]))
 
-    if not bank:
-        try:
-            lock = random.choice(get_legal_lock_combinations(observation))
-        except ValueError:
-            if check_bank_legal(observation):
-                lock = []
-                bank = True
-            else:                   # no legal actions
-                print("tried to lock some dice, did not succeed, then bank was illegal")
-                lock = None
-                bank = None
-    else:
-        if check_bank_legal(observation):
-            try:
-                lock = random.choice(get_legal_lock_combinations(observation))
-            except ValueError:
-                lock = []
-        else:
-            bank = False
-            try:
-                lock = random.choice(get_legal_lock_combinations(observation))
-            except ValueError:      # no legal actions
-                print("tried to bank, did not succeed, then no dice to lock")
-                lock = None
-                bank = None
+    if not check_bank_legal():
+        bank = False
 
-    # convert to the format that FarkleEnv expects
-    lock = convert_lock_indices_to_list(lock, observation)
+    if not check_lock_legal():
+        raise Exception("this is probably bad.")
+
     return lock, bank
-
 
 class Player:
     def __init__(self):
@@ -291,16 +258,16 @@ class ManualPlayer(Player):
         while True:
             lock = self._get_lock_input(observation)
             lock = [int(x) for x in lock]
-            if not check_lock_legal(lock, self.controller):
-                print("Error: illegal to lock these dice")
-                continue
 
             bank = self._get_bank_input()
 
-            if bank:
-                if not check_bank_legal(observation):
-                    print("Error: illegal to bank")
-                    continue
+            if not check_bank_legal(lock, bank, self.controller):
+                print("Error: illegal to bank")
+                continue
+
+            if not check_lock_legal(lock, bank, self.controller):
+                print("Error: illegal to lock these dice")
+                continue
             
             return lock, bank
 
