@@ -7,19 +7,26 @@ from testing import FarkleEnv
 # helper functions
 def get_legal_lock_combinations(observation):
     """
-    this function determines all legal combinations of dice to lock
+    Determine all legal combinations of dice to lock, given the current state.
 
     Parameters
     ----------
-    observation: dict
-        a dictionary containing the observations from the FarkleEnv
+    observation : dict
+        Observation from the Farkle environment. Must contain:
+            - "dice_locked": list[int]
+                1 if the die is currently locked, 0 otherwise
+            - "dice_values": list[int]
+                current values rolled for each die
 
     Returns
     -------
-    combinations: list[list[int]]
-        a 2D list containing all the possible selections of dice that can be locked
-        each list contains indices of the dice to locked
-            NOTE: this is not the format of the lock action the FarkleEnv expects. it must be converted.
+    combinations : list[list[int]]
+        A list of possible dice index selections that may be locked.
+        Each inner list contains indices (into dice_values) of dice
+        that can be locked together. 
+
+        NOTE: This is not in the action format expected by FarkleEnv;
+        it must be converted before being passed as an action.
     """
     dice_locked = observation["dice_locked"]
     dice_values = observation["dice_values"]
@@ -42,7 +49,7 @@ def _helper_flip_lock(string, dice_values, dice_locked):
     Returns
     -------
     new_locked: array-like
-        0 if the die was previously locked, but we are unlocking it by redeeming some combination of points, 1 otherwise
+        0 if the die was previously unlocked, but we are locking it, 1 otherwise
     """
     print(f"before helper: {dice_locked}")
     print(dice_values)
@@ -58,6 +65,22 @@ def _helper_flip_lock(string, dice_values, dice_locked):
     return new_locked
 
 def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
+    """
+    Recursive helper to enumerate all possible legal lock combinations.
+
+    Parameters
+    ----------
+    dice_values : list[int]
+        Values of the dice currently rolled.
+    dice_locked : list[int]
+        1 if the die is already locked, 0 otherwise.
+
+    Returns
+    -------
+    combinations : list[list[int]]
+        All possible index sets of dice that may be locked,
+        constructed recursively from valid scoring subsets.
+    """
     unlocked = []
     unlocked_indices = []
     num_unlocked = 0
@@ -127,6 +150,31 @@ def convert_lock_indices_to_list(indices, observation):
     return lock
 
 def choose_random_action(observation, controller):
+    """
+    Select a random action (lock and/or bank) for the player.
+
+    Parameters
+    ----------
+    observation : dict
+        Observation of the Farkle environment.
+    controller : object
+        The controller that enforces rules. Must provide:
+            - check_lock_legal(action: dict) -> bool
+            - check_bank_legal(action: dict) -> bool
+
+    Returns
+    -------
+    lock : np.ndarray
+        Binary array of length equal to number of dice.
+        1 indicates the die is locked, 0 otherwise.
+    bank : bool
+        True if the action is to bank, False otherwise.
+
+    Raises
+    ------
+    Exception
+        If no legal lock action could be chosen.
+    """
     """
     this function selects a random action for the agent
 
@@ -234,6 +282,22 @@ class ManualPlayer(Player):
                 return bank
 
     def _get_lock_input(self, observation):
+        """
+        Prompt the user to enter dice to lock.
+
+        The user must input a string of '0' and '1' with length equal
+        to the number of dice. '1' means the die at that position is locked.
+
+        Parameters
+        ----------
+        observation : dict
+            Current environment observation.
+
+        Returns
+        -------
+        lock : str
+            String of '0' and '1' indicating locked dice.
+        """
         while True:
             lock = input("dice to lock?")
             if len(lock) != len(observation["dice_values"]):
