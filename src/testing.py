@@ -144,6 +144,7 @@ class FarkleEnv(gym.Env):
             assert (already_locked > lock) or (already_locked == 0)    # if die was already locked, assert player is not trying to lock it again.
 
         if not all(x == 0 for x in lock_action):    # if the player is locking anything, make sure it's valid
+            assert self.verify_combo(self._dice_values, lock_action)
             assert self.calculate_points(self._dice_values, lock_action) != 0
 
         return True
@@ -244,6 +245,44 @@ class FarkleEnv(gym.Env):
 
         return max_points
 
+    def verify_combo(self, dice_values, lock_action):
+        """
+        verifies that the combination of dice a player has locked is valid.
+        i.e., all dice locked correspond to one or multiple combinations
+
+        Parameters
+        ---------
+        dice_values: array-like 
+            the value of each die
+        lock_action: array-like
+            indicates which dice the player locked this turn
+
+        Returns
+        -------
+        valid: bool
+            True if the dice locked correspond to some valid combination, False otherwise
+        """
+        locked = []
+        num_locked = 0
+        for lock, die in zip(lock_action, dice_values):
+            if lock:
+                locked.append(die)
+                num_locked += 1
+
+        locked.sort()
+        locked = [str(x) for x in locked]
+        string = "".join(locked)
+        for i in range(num_locked, 0, -1):
+            for dict in FarkleEnv.combinations[i]:
+                for key in dict.keys():
+                    if key in string:
+                        new_lock_action = self._helper_flip_lock(key, dice_values, lock_action)
+                        if all(x == 0 for x in lock_action):
+                            return True
+                        self.verify_combo(dice_values, new_lock_action) # if the currently found combination does not account for all the locked die, maybe this combination and some other with the remaining dice will
+
+        return False
+
     def check_farkle(self, dice_values, dice_locked):
         """
         checks if a player has farkled
@@ -291,7 +330,7 @@ class FarkleEnv(gym.Env):
             print("player attempted to lock illegal dice") 
             return False
 
-        if action["bank"] and (self._player_points[self._turn] + self._points_this_turn < 500):
+        if action["bank"] and (self._player_points[self._turn] + self._points_this_turn + self.calculate_points(self._dice_values, action["lock"]) < 500):
             print("player attempted to bank illegally")
             return False
 
