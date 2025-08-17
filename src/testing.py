@@ -133,11 +133,16 @@ class FarkleEnv(gym.Env):
         super().reset(seed=seed)
 
         # reset private representation of the game
-        self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._player_points = np.array([0 for _ in range(self.players)], dtype=int)
         self._points_this_turn = 0
         self._turn = 0
+        # TODO: this deviates from the true game of Farkle. it is impossible for a player to farkle at the start of their turn
+        while True:
+            self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
+            if not self.check_farkle(self._dice_values, self._dice_locked):
+                break
+
 
         observation = self._get_obs()
         info = self._get_info()
@@ -148,11 +153,12 @@ class FarkleEnv(gym.Env):
     def _new_round(self):
         # partially reset private representation of the game
         # if next player farkles off the bat, move to next player's turn
+        self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
+        self._points_this_turn = 0
+        self._turn = (self._turn + 1) % self.players
+        # TODO: this deviates from the true game of Farkle. it is impossible for a player to farkle at the start of their turn
         while True:
-            self._dice_values = self.observation_space["dice_values"].sample()
-            self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
-            self._points_this_turn = 0
-            self._turn = (self._turn + 1) % self.players
+            self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
             if not self.check_farkle(self._dice_values, self._dice_locked):
                 break
 
