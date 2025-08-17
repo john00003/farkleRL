@@ -30,14 +30,16 @@ class FarkleController:
         return env.check_legal(action)
 
     def check_lock_legal(self, action):
-        print(f"action in controller: {action}")
-        print(env.check_lock_legal(action))
-        print("in controller it returns:")
-        print(env.check_lock_legal(action))
-        return env.check_lock_legal(action)
+        try:
+            return env.check_lock_legal(action)
+        except AssertionError:
+            return False
 
     def check_bank_legal(self, action):
-        return env.check_bank_legal(action)
+        try:
+            return env.check_bank_legal(action)
+        except AssertionError:
+            return False
 
     def play_turn(self, player, observation, info):
         """
