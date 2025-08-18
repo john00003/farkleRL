@@ -255,7 +255,12 @@ class RandomPlayer(Player):
         pass
 
     def play(self, observation):
+        print("Getting random action...")
         lock, bank = choose_random_action(observation, self.controller)
+        if bank:
+            print(f"Random player decided to bank, and lock {lock}")
+        else:
+            print(f"Random player decided to lock {lock}")
         return lock, bank
 
     def update(self, reward):
@@ -334,7 +339,6 @@ class ManualPlayer(Player):
 
 
     def play(self, observation):
-        print(observation)
         lock, bank = self._get_action_ensure_legal(observation)
         return lock, bank
 
