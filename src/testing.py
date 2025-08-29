@@ -139,11 +139,7 @@ class FarkleEnv(gym.Env):
         self._player_points = np.array([0 for _ in range(self.players)], dtype=int)
         self._points_this_turn = 0
         self._turn = 0
-        # TODO: this deviates from the true game of Farkle. it is impossible for a player to farkle at the start of their turn
-        while True:
-            self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
-            if not self.check_farkle(self._dice_values, self._dice_locked):
-                break
+        self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
 
 
         observation = self._get_obs()
@@ -155,15 +151,12 @@ class FarkleEnv(gym.Env):
     def _new_round(self):
         # partially reset private representation of the game
         # if next player farkles off the bat, move to next player's turn
+        print("new round")
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._points_this_turn = 0
         self._turn = (self._turn + 1) % self.players
+        self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
         print(f"New round! Player {self._turn}, you're up!")
-        # TODO: this deviates from the true game of Farkle. it is impossible for a player to farkle at the start of their turn
-        while True:
-            self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
-            if not self.check_farkle(self._dice_values, self._dice_locked):
-                break
 
     def _roll_unlocked_dice(self):
         """
@@ -380,7 +373,7 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         return False # the player did not farkle, there is at least one redeemable combination
-        print("Player {self._turn} farkled!")
+        print(f"Player {self._turn} farkled!")
         return True
 
     def check_legal(self, action):
@@ -419,15 +412,25 @@ class FarkleEnv(gym.Env):
                      "turn": an integer indicating who's turn it is
         """
         print("Reading player action...")
-        assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
+        farkle = False
+        terminated = False
+        truncated = False
+        # assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
+        if action["lock"] is None and action["bank"] is None:
+            print("Game recognized that player farkled.")
+            assert self.check_farkle(self._dice_values, self._dice_locked)
+            # this is special to indicate that the player that has farkled has acknowledged this, and has been updated
+            # now we reset to a new round
+            self._new_round()
+            reward = 0
+            observation = self._get_obs()
+            info = self._get_info()
+            return observation, reward, terminated, truncated, info
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
 
         self._update_locks(action["lock"])
 
-        farkle = False
-        terminated = False
-        truncated = False
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
         self._points_this_turn += points
 
@@ -450,6 +453,8 @@ class FarkleEnv(gym.Env):
             # in both of these cases, player may have farkled
             if self.check_farkle(self._dice_values, self._dice_locked):
                 # player farkled, give them negative reward
+                # TODO: do not enw round if player farkled, instead notify controller of farkle
+                    # NO, DO BOTH
                 self._new_round()
                 farkle = True
 
@@ -462,7 +467,7 @@ class FarkleEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         # TODO: add points this turn to info or observation?
-        assert not info["farkle"]
+        #assert not info["farkle"]
         return observation, reward, terminated, truncated, info
             
 # register environment

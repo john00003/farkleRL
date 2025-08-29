@@ -56,6 +56,10 @@ class FarkleController:
         except AssertionError:
             return False
 
+    def _farkle_step(self):
+        action = {"lock": None, "bank": None}
+        return self._env.step(action)
+
     def play_turn(self, player, observation, info):
         """
         Play a full turn for a given player.
@@ -93,6 +97,12 @@ class FarkleController:
         truncated = False
         terminated = False
 
+        # first check if we farkled off the bat
+        if info["farkle"]:
+            print(f"Player {player_num} farkled! Sending farkle action...")
+            observation, reward, terminated, truncated, info = self._farkle_step() # call special function for when player farkled before they went
+            return observation, reward, terminated, truncated, info
+
         while(observation["turn"] == player_num and not truncated and not terminated): # until we move to next player
             print(f"Prompting player {player_num} to play...")
             lock, bank = player.play(observation) # prompt current player to play
@@ -100,12 +110,16 @@ class FarkleController:
             observation, reward, terminated, truncated, info = self._env.step(action)
             print(f"Player {player_num} received {reward} from that action")
             reward_this_turn += reward
+            if info["farkle"] or bank:
+                break
 
         # TODO: update player with reward after every action, or after all actions?
             # well, there will be only be one reward, the -1 that we get at the very end of the turn
+        print(f"End of player {player_num}'s turn.")
         print(f"Rewarding player {player_num} with reward of {reward_this_turn}.")
         player.update(reward_this_turn)
 
+        # return what is returned by step()
         return observation, reward, terminated, truncated, info
         
     def play_game(self, seed = None):
