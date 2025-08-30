@@ -55,7 +55,7 @@ class FarkleEnv(gym.Env):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
             # furthermore, make this extensible to setting where we have multiple agents, not just one
             # need some kind of environment controller class to do this. Gymnasium not built for multiagent
-        print("initializing FarkleEnv...")
+        self.log("initializing FarkleEnv...")
         # number of players in the game
         self.players = players
         # number of dice 
@@ -97,6 +97,9 @@ class FarkleEnv(gym.Env):
             }
         )
 
+    def log(self, string):
+        print(f"GAME: {string}")
+
     def _get_obs(self):
         """
         Get the current observation of the game state.
@@ -131,7 +134,7 @@ class FarkleEnv(gym.Env):
         }
 
     def reset(self, seed = None, options = None):
-        print("resetting FarkleEnv...")
+        self.log("resetting FarkleEnv...")
         super().reset(seed=seed)
 
         # reset private representation of the game
@@ -151,18 +154,17 @@ class FarkleEnv(gym.Env):
     def _new_round(self):
         # partially reset private representation of the game
         # if next player farkles off the bat, move to next player's turn
-        print("new round")
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._points_this_turn = 0
         self._turn = (self._turn + 1) % self.players
         self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
-        print(f"New round! Player {self._turn}, you're up!")
+        self.log(f"New round! Player {self._turn}, you're up!")
 
     def _roll_unlocked_dice(self):
         """
         Reroll all dice that are not locked, updating their values in place.
         """
-        print("Rolling...")
+        self.log("Rolling...")
         new_values = self.observation_space["dice_values"].sample()
         self._dice_values[self._dice_locked == 0] = new_values[self._dice_locked == 0]   # replace old dice values with new dice values in all indices where the dice are unlocked
 
@@ -185,7 +187,7 @@ class FarkleEnv(gym.Env):
     def _hot_dice(self):
         # partially reset private representation of dice
         # do not change turn or reset points_this_turn
-        print("Hot dice!")
+        self.log("Hot dice!")
         self._dice_values = self.observation_space["dice_values"].sample()
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
 
@@ -373,22 +375,21 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         return False # the player did not farkle, there is at least one redeemable combination
-        print(f"Player {self._turn} farkled!")
+        self.log(f"check_farkle found that Player {self._turn} farkled!")
         return True
 
     def check_legal(self, action):
         """
         checks if a player's action is legal
         """
-        print(action)
         try:
             self.check_lock_legal(action)
         except AssertionError:
-            print("player attempted to lock illegal dice") 
+            self.log(f"Player {self._turn} attempted to lock illegal dice") 
             return False
 
         if action["bank"] and (self._player_points[self._turn] + self._points_this_turn + self.calculate_points(self._dice_values, action["lock"]) < 500):
-            print("player attempted to bank illegally")
+            self.log(f"Player {self._turn} attempted to bank illegally")
             return False
 
         return True
@@ -411,13 +412,13 @@ class FarkleEnv(gym.Env):
                      "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
                      "turn": an integer indicating who's turn it is
         """
-        print("Reading player action...")
+        self.log("Entering step function")
         farkle = False
         terminated = False
         truncated = False
         # assert action["lock"] is not None and action["bank"] is not None        # player should never be prompted to play if they farkled
         if action["lock"] is None and action["bank"] is None:
-            print("Game recognized that player farkled.")
+            self.log("Game recognized that player farkled.")
             assert self.check_farkle(self._dice_values, self._dice_locked)
             # this is special to indicate that the player that has farkled has acknowledged this, and has been updated
             # now we reset to a new round
@@ -429,12 +430,16 @@ class FarkleEnv(gym.Env):
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
 
+        self.log("Updating locks")
         self._update_locks(action["lock"])
 
         points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
+        self.log(f"Player's action received {points}.")
         self._points_this_turn += points
+        self.log(f"Player now has {self._points_this_turn} this turn.")
 
         if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
+            self.log(f"Player {self._turn} has over {self.max_points}! They win!")
             terminated = True
             self._player_points[self._turn] += self._points_this_turn
             reward = 0
@@ -463,7 +468,6 @@ class FarkleEnv(gym.Env):
             self._new_round() # only do new round if the player banked
 
         reward = 0 if (terminated or truncated or (not action["bank"] and not farkle)) else -1
-        print(f"Reward of {reward} received.")   #confirm that reward is correct
         observation = self._get_obs()
         info = self._get_info() # TODO: add to info if turn ended?
         # TODO: add points this turn to info or observation?

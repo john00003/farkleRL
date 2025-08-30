@@ -23,6 +23,14 @@ class FarkleController:
         self.players = players
         self.agent_player_num = agent_player_num # TODO: can we get rid of this?
 
+    def log(self, string):
+        print(f"CONTROLLER: {string}")
+
+    def print_action(observation, action):
+        self.print_dice(observation, action)
+        self.print_lock(observation, action)
+        self.print_bank(observation, action)
+
     def _new_game(self, seed = None):
         """
         Start a new game in the environment.
@@ -99,24 +107,29 @@ class FarkleController:
 
         # first check if we farkled off the bat
         if info["farkle"]:
-            print(f"Player {player_num} farkled! Sending farkle action...")
+            self.log(f"Player {player_num} farkled! Sending farkle action...")
             observation, reward, terminated, truncated, info = self._farkle_step() # call special function for when player farkled before they went
             return observation, reward, terminated, truncated, info
 
         while(observation["turn"] == player_num and not truncated and not terminated): # until we move to next player
-            print(f"Prompting player {player_num} to play...")
+            self.log(f"Prompting player {player_num} to play...")
             lock, bank = player.play(observation) # prompt current player to play
+            self.log(f"Player {player_num} played lock: {lock}, bank: {bank}")
             action = {"lock": lock, "bank": bank}
             observation, reward, terminated, truncated, info = self._env.step(action)
-            print(f"Player {player_num} received {reward} from that action")
+            self.log(f"Player {player_num} received {reward} from that action")
             reward_this_turn += reward
             if info["farkle"] or bank:
+                if info["farkle"]:
+                    self.log(f"Player {player_num} is ending their turn because they farkled.")
+                else:
+                    self.log(f"Player {player_num} is ending their turn because they are banking")
                 break
 
         # TODO: update player with reward after every action, or after all actions?
             # well, there will be only be one reward, the -1 that we get at the very end of the turn
-        print(f"End of player {player_num}'s turn.")
-        print(f"Rewarding player {player_num} with reward of {reward_this_turn}.")
+        self.log(f"End of player {player_num}'s turn. They received {observation["points_this_turn"]} points this turn. Player now has {observation["player_points"][player_num]} points.")
+        self.log(f"Rewarding player {player_num} with reward of {reward_this_turn}.")
         player.update(reward_this_turn)
 
         # return what is returned by step()
@@ -143,10 +156,10 @@ class FarkleController:
         # TODO: important for controller not to determine who is next to play. let FarkleEnv and observation tell us who is next to play (in case of b2b farkles)
         while info["winner"] == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
             current_player = observation["turn"]
-            print(f"Start of player {current_player}'s turn.")
+            self.log(f"Start of player {current_player}'s turn.")
             observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info)
 
-        print(f"Winner is player {info['winner']}!")
+        self.log(f"Winner is player {info['winner']}!")
 
 
 if __name__ == "__main__":

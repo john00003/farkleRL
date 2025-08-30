@@ -51,9 +51,6 @@ def _helper_flip_lock(string, dice_values, dice_locked):
     new_locked: array-like
         0 if the die was previously unlocked, but we are locking it, 1 otherwise
     """
-    print(f"before helper: {dice_locked}")
-    print(dice_values)
-    print(string)
     new_locked = [x for x in dice_locked]
     for char in string:
         x = int(char)
@@ -61,7 +58,6 @@ def _helper_flip_lock(string, dice_values, dice_locked):
             if value == x and new_locked[i] == 0:
                 new_locked[i] = 1
                 break
-    print(f"after helper: {new_locked}")
     return new_locked
 
 def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
@@ -103,14 +99,10 @@ def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
                 curr_combinations = []
                 curr_combinations.append(unlocked_indices[index:index+len(key)]) # append the indices that we are allowed to lock
                 # we get the possible combinations of dice to lock without the dice that we locked in the current recursion level
-                print(f"before recursive call: {curr_combinations}")
                 additional = get_legal_lock_combinations_wrapped(dice_values, _helper_flip_lock(key, dice_values, dice_locked)) #TODO: does this work?
                 curr_combinations.extend(additional)
                 for combo in curr_combinations:
                     if len(set(combo)) != len(combo):
-                        print("meow")
-                        print(curr_combinations)
-                        print(additional)
                         raise Exception("badness")
                 # we get the combinations formed by adding the current combination to the remaining combinations found by recursing
                 additional_with_original = copy.deepcopy(additional)
@@ -120,9 +112,6 @@ def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
                 curr_combinations.extend(additional_with_original)
                 for combo in curr_combinations:
                     if len(set(combo)) != len(combo):
-                        print("woof")
-                        print(curr_combinations)
-                        print(additional)
                         raise Exception("badness two")
                 # sort and do not add duplicates
                 for combo in curr_combinations:
@@ -130,14 +119,10 @@ def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
                     if combo not in combinations:
                         combinations.append(combo)
 
-    print("final generated combinations:")
-    print(combinations)
-
     return combinations
 
 def check_lock_legal(lock, bank, controller):
     action = {"lock": lock, "bank": bank}
-    print(f"action being sent to controller {action}")
     return controller.check_lock_legal(action)
 
 def check_bank_legal(lock, bank, controller):
@@ -213,6 +198,9 @@ class Player:
     def __init__(self):
         self.controller = None
         pass
+
+    def log(self, string):
+        print(f"PLAYER: {string}.")
  
     def set_controller(self, controller):
         self.controller = controller
@@ -255,12 +243,12 @@ class RandomPlayer(Player):
         pass
 
     def play(self, observation):
-        print("Getting random action...")
+        self.log("Getting random action...")
         lock, bank = choose_random_action(observation, self.controller)
         if bank:
-            print(f"Random player decided to bank, and lock {lock}")
+            self.log(f"Random player decided to bank, and lock {lock}")
         else:
-            print(f"Random player decided to lock {lock}")
+            self.log(f"Random player decided to lock {lock}")
         return lock, bank
 
     def update(self, reward):
@@ -281,7 +269,7 @@ class ManualPlayer(Player):
             
             # check for good input
             if bank.strip() != "" and bank != "no" and bank != "n" and bank != "No" and bank != "NO" and bank != "N":
-                print("Error: Select y/N to bank")
+                self.log("Error: Select y/N to bank")
             else:
                 bank = False
                 return bank
@@ -306,13 +294,13 @@ class ManualPlayer(Player):
         while True:
             lock = input("dice to lock?")
             if len(lock) != len(observation["dice_values"]):
-                print("Error: string of dice to lock must be of same length as total dice")
+                self.log("Error: string of dice to lock must be of same length as total dice")
                 continue
 
             illegal = False 
             for x in lock:
                 if x != "1" and x != "0":
-                    print("Error: string of dice to lock must consist of '1' in the places of dice to lock, and '0' in all other places")
+                    self.log("Error: string of dice to lock must consist of '1' in the places of dice to lock, and '0' in all other places")
                     illegal = True
                     break
             if illegal:
@@ -328,11 +316,11 @@ class ManualPlayer(Player):
             bank = self._get_bank_input()
 
             if not check_bank_legal(lock, bank, self.controller):
-                print("Error: illegal to bank")
+                self.log("Error: illegal to bank")
                 continue
 
             if not check_lock_legal(lock, bank, self.controller):
-                print("Error: illegal to lock these dice")
+                self.log("Error: illegal to lock these dice")
                 continue
             
             return lock, bank
