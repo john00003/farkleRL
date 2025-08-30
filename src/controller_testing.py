@@ -26,10 +26,13 @@ class FarkleController:
     def log(self, string):
         print(f"CONTROLLER: {string}")
 
-    def print_action(observation, action):
+    def print_action(self, observation, action):
         self.print_dice(observation, action)
-        self.print_lock(observation, action)
+        self.print_lock(observation, action) #TODO: print_lock should have some indicator (such as ^) to indicate dice was locked this turn
         self.print_bank(observation, action)
+
+    def print_dice(self, observation, action):
+        
 
     def _new_game(self, seed = None):
         """
