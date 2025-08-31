@@ -357,6 +357,9 @@ class FarkleEnv(gym.Env):
         bool
             True is the player farkled
         """
+        # do not check if a player has won.
+        if np.any(self._player_points > self.max_points):
+            return False
         # return True if player farkled, return False otherwise
         # TODO: use self._dice_values or allow parameter to be passed in?
         # TODO: use calculate_points for this?
@@ -423,7 +426,7 @@ class FarkleEnv(gym.Env):
             # this is special to indicate that the player that has farkled has acknowledged this, and has been updated
             # now we reset to a new round
             self._new_round()
-            reward = 0
+            reward = -1
             observation = self._get_obs()
             info = self._get_info()
             return observation, reward, terminated, truncated, info
