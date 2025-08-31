@@ -5,6 +5,57 @@ import player_testing
 
 class FarkleController:
 
+    @staticmethod
+    def get_dice_strings():
+        one = [" ----------- ",
+            "|           |",
+            "|           |",
+            "|     0     |",
+            "|           |",
+            "|           |",
+            " ----------- ",]
+        two = [" ----------- ",
+            "| 0         |",
+            "|           |",
+            "|           |",
+            "|           |",
+            "|         0 |",
+            " ----------- ",]
+        three = [" ----------- ",
+            "| 0         |",
+            "|           |",
+            "|     0     |",
+            "|           |",
+            "|         0 |",
+            " ----------- ",]
+        four = [" ----------- ",
+            "| 0       0 |",
+            "|           |",
+            "|           |",
+            "|           |",
+            "| 0       0 |",
+            " ----------- ",]
+        five = [" ----------- ",
+            "| 0       0 |",
+            "|           |",
+            "|     0     |",
+            "|           |",
+            "| 0       0 |",
+            " ----------- ",]
+        six = [" ----------- ",
+            "| 0       0 |",
+            "|           |",
+            "| 0       0 |",
+            "|           |",
+            "| 0       0 |",
+            " ----------- ",]
+        dice_str = {1: one, 2: two, 3: three, 4: four, 5: five, 6: six}
+
+        return dice_str
+
+    dice_str = get_dice_strings()
+
+
     def __init__(self, env, players, agent_player_num = 0):
         """
         initializes the FarkleController class
@@ -32,7 +83,11 @@ class FarkleController:
         self.print_bank(observation, action)
 
     def print_dice(self, observation, action):
+        dice = [FarkleController.dice_str[x] for x in observation["dice_values"]]
         
+        for i in range(7):
+            line = [die[i] for die in dice]
+            print(f"{"  ".join(line)}")
 
     def _new_game(self, seed = None):
         """
@@ -169,6 +224,9 @@ if __name__ == "__main__":
     players = [player_testing.RandomPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
+    observation = {"dice_values": [1,2,3,4,5,6]}
+    game.print_dice(observation, None)
+    quit()
     for player in players:
         player.set_controller(game)
     game.play_game()
