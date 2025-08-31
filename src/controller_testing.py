@@ -192,6 +192,7 @@ class FarkleController:
             lock, bank = player.play(observation) # prompt current player to play
             self.log(f"Player {player_num} played lock: {lock}, bank: {bank}")
             action = {"lock": lock, "bank": bank}
+            self.print_action(observation, action)
             observation, reward, terminated, truncated, info = self._env.step(action)
             self.log(f"Player {player_num} received {reward} from that action")
             reward_this_turn += reward
@@ -242,12 +243,12 @@ if __name__ == "__main__":
     players = [player_testing.RandomPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
-    observation = {"dice_values": [1,2,3,4,5,6], "dice_locked": [False, False, False, True, True, True], "turn": 1}
-    action = {"lock": [False, False, True, False, False, False], "bank": True}
-    game.print_dice(observation, action)
-    game.print_lock(observation, action)
-    game.print_bank(observation, action)
-    quit()
+    # observation = {"dice_values": [1,2,3,4,5,6], "dice_locked": [False, False, False, True, True, True], "turn": 1}
+    # action = {"lock": [False, False, True, False, False, False], "bank": True}
+    # game.print_dice(observation, action)
+    # game.print_lock(observation, action)
+    # game.print_bank(observation, action)
+    # quit()
     for player in players:
         player.set_controller(game)
     game.play_game()
