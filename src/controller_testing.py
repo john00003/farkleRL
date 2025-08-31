@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 import testing
 import player_testing
+import curses
 
 class FarkleController:
 
@@ -53,7 +54,16 @@ class FarkleController:
 
         return dice_str
 
+    @staticmethod
+    def get_lock_strings():
+        locked = "     [x]     " 
+        newly_locked = "     [X]     " 
+        unlocked = "     [ ]     "
+        lock_str = {0: unlocked, 1: locked, 2: newly_locked}
+        return lock_str
+
     dice_str = get_dice_strings()
+    lock_str = get_lock_strings()
 
 
     def __init__(self, env, players, agent_player_num = 0):
@@ -88,6 +98,14 @@ class FarkleController:
         for i in range(7):
             line = [die[i] for die in dice]
             print(f"{"  ".join(line)}")
+
+    def print_lock(self, observation, action):
+        locked = [FarkleController.lock_str[2] if action["lock"][i] else FarkleController.lock_str[1] if observation["dice_locked"][i] else FarkleController.lock_str[0] for i in range(len(observation["dice_locked"]))]
+        print(f"{"  ".join(locked)}")
+
+    def print_bank(self, observation, action):
+        if action["bank"]:
+            print(f"             PLAYER {observation["turn"]} BANKED!                 ")
 
     def _new_game(self, seed = None):
         """
@@ -224,8 +242,11 @@ if __name__ == "__main__":
     players = [player_testing.RandomPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
-    observation = {"dice_values": [1,2,3,4,5,6]}
-    game.print_dice(observation, None)
+    observation = {"dice_values": [1,2,3,4,5,6], "dice_locked": [False, False, False, True, True, True], "turn": 1}
+    action = {"lock": [False, False, True, False, False, False], "bank": True}
+    game.print_dice(observation, action)
+    game.print_lock(observation, action)
+    game.print_bank(observation, action)
     quit()
     for player in players:
         player.set_controller(game)
