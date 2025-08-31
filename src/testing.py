@@ -1,5 +1,6 @@
 import numpy as np
 import gymnasium as gym
+import utility
 from gymnasium.envs.registration import register
 
 
@@ -51,6 +52,9 @@ class FarkleEnv(gym.Env):
     
     combinations = _get_combinations()
 
+    dice_str = utility.get_dice_strings()
+    lock_str = utility.get_lock_strings()
+
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
         # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
             # furthermore, make this extensible to setting where we have multiple agents, not just one
@@ -99,6 +103,17 @@ class FarkleEnv(gym.Env):
 
     def log(self, string):
         print(f"GAME: {string}")
+
+    def print_dice(self, observation, action):
+        dice = [FarkleEnv.dice_str[x] for x in observation["dice_values"]]
+        
+        for i in range(7):
+            line = [die[i] for die in dice]
+            print(f"{"  ".join(line)}")
+
+    def print_lock(self, observation, action):
+        locked = [FarkleEnv.lock_str[1] if action["lock"][i] or observation["dice_locked"][i] else FarkleEnv.lock_str[0] for i in range(len(observation["dice_locked"]))]
+        print(f"{"  ".join(locked)}")
 
     def _get_obs(self):
         """
@@ -456,6 +471,9 @@ class FarkleEnv(gym.Env):
         if not action["bank"]:
             if not hot_dice:
                 self._roll_unlocked_dice() # we
+                temp_obs = self._get_obs()
+                self.print_dice(temp_obs, action)
+                self.print_lock(temp_obs, action)
             else:
                 self._hot_dice()
             # in both of these cases, player may have farkled

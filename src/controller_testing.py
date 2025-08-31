@@ -1,69 +1,14 @@
 import gymnasium as gym
 import numpy as np
 import testing
+import utility
 import player_testing
 import curses
 
 class FarkleController:
 
-    @staticmethod
-    def get_dice_strings():
-        one = [" ----------- ",
-            "|           |",
-            "|           |",
-            "|     0     |",
-            "|           |",
-            "|           |",
-            " ----------- ",]
-        two = [" ----------- ",
-            "| 0         |",
-            "|           |",
-            "|           |",
-            "|           |",
-            "|         0 |",
-            " ----------- ",]
-        three = [" ----------- ",
-            "| 0         |",
-            "|           |",
-            "|     0     |",
-            "|           |",
-            "|         0 |",
-            " ----------- ",]
-        four = [" ----------- ",
-            "| 0       0 |",
-            "|           |",
-            "|           |",
-            "|           |",
-            "| 0       0 |",
-            " ----------- ",]
-        five = [" ----------- ",
-            "| 0       0 |",
-            "|           |",
-            "|     0     |",
-            "|           |",
-            "| 0       0 |",
-            " ----------- ",]
-        six = [" ----------- ",
-            "| 0       0 |",
-            "|           |",
-            "| 0       0 |",
-            "|           |",
-            "| 0       0 |",
-            " ----------- ",]
-        dice_str = {1: one, 2: two, 3: three, 4: four, 5: five, 6: six}
-
-        return dice_str
-
-    @staticmethod
-    def get_lock_strings():
-        locked = "     [x]     " 
-        newly_locked = "     [X]     " 
-        unlocked = "     [ ]     "
-        lock_str = {0: unlocked, 1: locked, 2: newly_locked}
-        return lock_str
-
-    dice_str = get_dice_strings()
-    lock_str = get_lock_strings()
+    dice_str = utility.get_dice_strings()
+    lock_str = utility.get_lock_strings()
 
 
     def __init__(self, env, players, agent_player_num = 0):
@@ -181,6 +126,8 @@ class FarkleController:
         truncated = False
         terminated = False
 
+        init_points = observation["player_points"][player_num]
+
         # first check if we farkled off the bat
         if info["farkle"]:
             self.log(f"Player {player_num} farkled! Sending farkle action...")
@@ -205,7 +152,7 @@ class FarkleController:
 
         # TODO: update player with reward after every action, or after all actions?
             # well, there will be only be one reward, the -1 that we get at the very end of the turn
-        self.log(f"End of player {player_num}'s turn. They received {observation["points_this_turn"]} points this turn. Player now has {observation["player_points"][player_num]} points.")
+        self.log(f"End of player {player_num}'s turn. They received {observation["player_points"][player_num] - init_points} points this turn. Player now has {observation["player_points"][player_num]} points.")
         self.log(f"Rewarding player {player_num} with reward of {reward_this_turn}.")
         player.update(reward_this_turn)
 
