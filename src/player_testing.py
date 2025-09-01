@@ -223,7 +223,7 @@ class Player:
         """
         raise NotImplementedError
 
-    def update(self, reward):
+    def update(self, observation, reward):
         raise NotImplementedError
 
 class RLAgent(Player):
@@ -233,7 +233,7 @@ class RLAgent(Player):
     def play(self, observation):
         pass
 
-    def update(self, reward):
+    def update(self, observation, reward):
         pass
 
 
@@ -251,7 +251,7 @@ class RandomPlayer(Player):
             self.log(f"Random player decided to lock {lock}")
         return lock, bank
 
-    def update(self, reward):
+    def update(self, observation, reward):
         # no need to update, this player is not an RL agent
         pass
 
@@ -330,6 +330,6 @@ class ManualPlayer(Player):
         lock, bank = self._get_action_ensure_legal(observation)
         return lock, bank
 
-    def update(self, reward):
+    def update(self, observation, reward):
         # no need to update, this player is not an RL agent
         pass

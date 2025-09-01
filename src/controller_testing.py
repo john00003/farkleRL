@@ -85,11 +85,82 @@ class FarkleController:
         except AssertionError:
             return False
 
-    def _farkle_step(self):
+    def _farkle_step_old(self):
         action = {"lock": None, "bank": None}
         return self._env.step(action)
 
-    def play_turn(self, player, observation, info):
+    def _farkle_step(self):
+        self.log(f"Acknowledging farkle.")
+        return self._env.acknowledge_farkle()
+
+    def _bank_step(self):
+        self.log(f"Acknowledging bank.")
+        return self._env.acknowledge_bank()
+
+    def play_turn(self, player, observation, info, reward, terminated, truncated):
+        """
+        Play a full turn for a given player.
+
+        Parameters
+        ----------
+        player : Player
+            Player object whose turn it is.
+        observation : dict
+            Current observation from the environment.
+        info : dict
+            Additional environment info.
+
+        Returns
+        -------
+        observation : dict
+            Final observation after the player's turn. A dict containing:
+                - "dice_values": array of current die values
+                - "dice_locked": array indicating locked dice
+                    0 if the corresponding dice is unlocked, 1 otherwise
+                - "player_points": array of each player's total points
+                - "turn": index of the current player's turn
+                - "points_this_turn": points accumulated by the active player this turn
+        reward : float
+            Reward obtained during the turn.
+        terminated : bool
+            Whether the episode terminated.
+        truncated : bool
+            Whether the episode was truncated.
+        info : dict
+            Final info dictionary after the turn.
+        """
+        assert not terminated and not truncated
+
+        if info["farkle"]:
+            assert reward == -1
+            self.log(f"Player {observation["turn"]} farkled off the bat! Sending reward to player.")
+            # the player farkled off the bat
+            player.update(observation, reward)
+            # we prompt the environment to move to a new round for the next player's turn
+            return self._farkle_step()
+
+        action = {"bank": False}
+        while not info["farkle"] and not action["bank"]:
+            assert reward == 0
+            self.log(f"Prompting player {observation["turn"]} to play!")
+            lock, bank = player.play(observation) # prompt current player to play
+            action = {"lock": lock, "bank": bank}
+            self.print_action(observation, action)
+            observation, reward, terminated, truncated, info = self._env.step(action)
+            self.log(f"Sending reward of {reward} to player {observation["turn"]}.")
+            player.update(observation, reward)
+
+        if info["farkle"]:
+            self.log(f"Player {observation["turn"]} farkled! They would have got {observation["points_this_turn"]} points. They remain at {observation["player_points"][observation["turn"]]} points.")
+            return self._farkle_step()
+        elif action["bank"]:
+            assert "lock" in action
+            self.log(f"Player {observation["turn"]} banked! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {observation["player_points"][observation["turn"]]} points.")
+            return self._bank_step()
+        else:
+            raise Exception()
+
+    def play_turn_old(self, player, observation, info):
         """
         Play a full turn for a given player.
 
@@ -178,12 +249,13 @@ class FarkleController:
         observation, info = self._new_game(seed)
         truncated = False
         terminated = False
+        reward = -1 if info["farkle"] else 0
 
         # TODO: important for controller not to determine who is next to play. let FarkleEnv and observation tell us who is next to play (in case of b2b farkles)
         while info["winner"] == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
             current_player = observation["turn"]
             self.log(f"Start of player {current_player}'s turn.")
-            observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info)
+            observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info, reward, terminated, truncated)
 
         self.log(f"Winner is player {info['winner']}!")
 

@@ -132,7 +132,7 @@ class FarkleEnv(gym.Env):
         """
         return {"dice_values": self._dice_values, "dice_locked": self._dice_locked, "player_points": self._player_points, "turn": self._turn, "points_this_turn": self._points_this_turn}
 
-    def _get_info(self):
+    def _get_info(self, bank=False):
         """
         Returns additional info about the current state.
     
@@ -144,7 +144,7 @@ class FarkleEnv(gym.Env):
             - "winner": int, index of winning player if any, else -1
         """
         return {
-            "farkle": self.check_farkle(self._dice_values, self._dice_locked), # TODO: this does not currently correctly return if the player farkled. no point, since the next player doesn't need this info
+            "farkle": self.check_farkle(self._dice_values, self._dice_locked, bank), # TODO: this does not currently correctly return if the player farkled. no point, since the next player doesn't need this info
             "winner": self._check_win(),
         }
 
@@ -176,8 +176,9 @@ class FarkleEnv(gym.Env):
         self.log(f"New round! Player {self._turn}, you're up!")
 
         temp_obs = self._get_obs()
-        self.print_dice(temp_obs, action)
-        self.print_lock(temp_obs, action)
+        temp_action = {"lock": [False] * self.dice, "bank": False}
+        self.print_dice(temp_obs, temp_action)
+        self.print_lock(temp_obs, temp_action)
 
     def _roll_unlocked_dice(self):
         """
@@ -359,7 +360,7 @@ class FarkleEnv(gym.Env):
 
         return False
 
-    def check_farkle(self, dice_values, dice_locked):
+    def check_farkle(self, dice_values, dice_locked, bank=False):
         """
         checks if a player has farkled
 
@@ -376,6 +377,8 @@ class FarkleEnv(gym.Env):
         bool
             True is the player farkled
         """
+        if bank:
+            return False
         # do not check if a player has won.
         if np.any(self._player_points > self.max_points):
             return False
@@ -420,19 +423,22 @@ class FarkleEnv(gym.Env):
         """ acknowledge_farkle is called by the controller after a player has farkled. 
         this will update the game to the next player's turn after the reward after banking has been safely consumed by the player.
         """
-        assert self.check_farkle()
+        assert self.check_farkle(self._dice_values, self._dice_locked)
 
         self._new_round()
         terminated = False
         truncated = False
-        reward = -1
 
-        observation = _get_obs()
-        info = _get_info()
+        observation = self._get_obs()
+        info = self._get_info()
+
+        reward = -1 if info["farkle"] else 0
+        if info["farkle"]:
+            self.log(f"Player {observation["turn"]} farkled off the bat! Expecting acknowledgement...")
 
         return observation, reward, terminated, truncated, info
 
-    def acknowledge_bank():
+    def acknowledge_bank(self):
         """ acknowledge_bank is called by the controller after a player has banked.
         this allows the game to move to the next player's turn after the reward after banking has been safely consumed by the player.
 
@@ -441,10 +447,13 @@ class FarkleEnv(gym.Env):
         self._new_round()
         terminated = False
         truncated = False
-        reward = -1
 
-        observation = _get_obs()
-        info = _get_info()
+        observation = self._get_obs()
+        info = self._get_info()
+
+        reward = -1 if info["farkle"] else 0
+        if info["farkle"]:
+            self.log(f"Player {observation["turn"]} farkled off the bat! Expecting acknowledgement...")
 
         return observation, reward, terminated, truncated, info
 
@@ -501,16 +510,17 @@ class FarkleEnv(gym.Env):
             self.log(f"Player {self._turn} banks. Expecting bank acknowledgement.")
             reward = -1
             observation = self._get_obs()
-            info = self._get_info()
+            info = self._get_info(True)
             return observation, reward, terminated, truncated, info
 
         
         if self._check_hot_dice(self._dice_locked):
-            self.hot_dice()
+            self._hot_dice()
         else:
             self._roll_unlocked_dice() 
 
         observation = self._get_obs()
+        info = self._get_info()
         self.print_dice(observation, action)
         self.print_lock(observation, action)
         # in both of these cases, player may have farkled
