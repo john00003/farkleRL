@@ -198,12 +198,6 @@ if __name__ == "__main__":
     players = [player_testing.RandomPlayer()]
     env = testing.FarkleEnv()
     game = FarkleController(env, players)
-    # observation = {"dice_values": [1,2,3,4,5,6], "dice_locked": [False, False, False, True, True, True], "turn": 1}
-    # action = {"lock": [False, False, True, False, False, False], "bank": True}
-    # game.print_dice(observation, action)
-    # game.print_lock(observation, action)
-    # game.print_bank(observation, action)
-    # quit()
     for player in players:
         player.set_controller(game)
     game.play_game()

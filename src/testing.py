@@ -4,7 +4,6 @@ import utility
 from gymnasium.envs.registration import register
 
 
-# TODO: should we have a singler player environment wrapper? i dont know
 class FarkleEnv(gym.Env):
 
 
@@ -56,9 +55,6 @@ class FarkleEnv(gym.Env):
     lock_str = utility.get_lock_strings()
 
     def __init__(self, players = 1, random_seed = None, max_points = 10000):
-        # TODO: somehow establish a turn order, where we can report back to the agent which place in the turn order they get to play
-            # furthermore, make this extensible to setting where we have multiple agents, not just one
-            # need some kind of environment controller class to do this. Gymnasium not built for multiagent
         self.log("initializing FarkleEnv...")
         # number of players in the game
         self.players = players
@@ -66,8 +62,6 @@ class FarkleEnv(gym.Env):
         self.dice = 6
         # number of points to win the game
         self.max_points = max_points
-        # set combinations to reduce runtime getting it in the future
-        #self.combinations = self._get_combinations()
 
         # observation space of environment
             # value of each die
@@ -144,7 +138,7 @@ class FarkleEnv(gym.Env):
             - "winner": int, index of winning player if any, else -1
         """
         return {
-            "farkle": self.check_farkle(self._dice_values, self._dice_locked, bank), # TODO: this does not currently correctly return if the player farkled. no point, since the next player doesn't need this info
+            "farkle": self.check_farkle(self._dice_values, self._dice_locked, bank), 
             "winner": self._check_win(),
         }
 
@@ -168,7 +162,6 @@ class FarkleEnv(gym.Env):
     # this is called to partially reset the environment state when a player ends their turn
     def _new_round(self):
         # partially reset private representation of the game
-        # if next player farkles off the bat, move to next player's turn
         self._dice_locked = np.array([0 for _ in range(self.dice)], dtype=int) 
         self._points_this_turn = 0
         self._turn = (self._turn + 1) % self.players
@@ -293,11 +286,6 @@ class FarkleEnv(gym.Env):
         max_points: integer
             the amount of points scored by the player's lock actions
         """
-        # TODO: check_farkle and check_legal lock can also be implemented here (for game functionality)
-            # just check if points == 0 and if so, the player farkled?
-        # TODO: add to check legal lock that valid combinations are locked!
-
-
         locked = []
         num_locked = 0
         for lock, die in zip(lock_action, dice_values):
@@ -314,8 +302,7 @@ class FarkleEnv(gym.Env):
                 for key in dict.keys():
                     if key in string:
                         current_points = dict[key]
-                        # TODO: is this supposed to be lock_action or dice_locked????
-                        current_points += self.calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) #TODO: does this work?
+                        current_points += self.calculate_points(dice_values, self._helper_flip_lock(key, dice_values, lock_action)) 
                         max_points = max(current_points, max_points)
 
         return max_points
@@ -383,8 +370,6 @@ class FarkleEnv(gym.Env):
         if np.any(self._player_points > self.max_points):
             return False
         # return True if player farkled, return False otherwise
-        # TODO: use self._dice_values or allow parameter to be passed in?
-        # TODO: use calculate_points for this?
         unlocked = []
         num_unlocked = 0
         for lock, die in zip(dice_locked, dice_values):

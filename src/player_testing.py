@@ -175,10 +175,6 @@ def choose_random_action(observation, controller):
     bank: boolean
         a boolean indicating if the action is to bank
     """
-    # TODO: this could be bad, if random player had farkled, and coukd not bank, and was prompted to make a turn, they would query random actions forever while checking if they are legal!!!!
-        # where is player being prompted for legal action in while loop?
-    # TODO: this method only gets legal combinations to lock, but has no way of checking if it is legal to bank
-    # TODO: check if we still should expect to get ValueError
     bank = np.random.choice([True, False])
     try:
         lock = random.choice(get_legal_lock_combinations(observation))
