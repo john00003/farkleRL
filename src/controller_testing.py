@@ -85,10 +85,6 @@ class FarkleController:
         except AssertionError:
             return False
 
-    def _farkle_step_old(self):
-        action = {"lock": None, "bank": None}
-        return self._env.step(action)
-
     def _farkle_step(self):
         self.log(f"Acknowledging farkle.")
         return self._env.acknowledge_farkle()
