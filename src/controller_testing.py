@@ -141,13 +141,15 @@ class FarkleController:
             action = {"lock": lock, "bank": bank}
             self.print_action(observation, action)
             observation, reward, terminated, truncated, info = self._env.step(action)
-            self.log(f"Player {player_num} received {reward} from that action")
+            self.log(f"Player {player_num} received a reward of {reward} from that action")
             reward_this_turn += reward
-            if info["farkle"] or bank:
-                if info["farkle"]:
-                    self.log(f"Player {player_num} is ending their turn because they farkled.")
-                else:
+            if info["farkle"]:
+                raise Exception # should not happen
+            if reward == -1: # if the player either banked or farkled, end the turn
+                if action["bank"]:
                     self.log(f"Player {player_num} is ending their turn because they are banking")
+                else:
+                    self.log(f"Player {player_num} is ending their turn because they farkled.")
                 break
 
         # TODO: update player with reward after every action, or after all actions?
