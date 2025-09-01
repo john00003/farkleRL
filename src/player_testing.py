@@ -175,15 +175,27 @@ def choose_random_action(observation, controller):
     bank: boolean
         a boolean indicating if the action is to bank
     """
-    bank = np.random.choice([True, False])
-    try:
-        lock = random.choice(get_legal_lock_combinations(observation))
+    # bank = np.random.choice([True, False])
+    possible_actions = []
+    for lock in get_legal_lock_combinations(observation):
         lock = convert_lock_indices_to_list(lock, observation)
-    except IndexError:
-        lock = np.zeros(len(observation["dice_values"]))
+        possible_actions.append((False, lock))
+        if check_bank_legal(lock, True, controller):
+            possible_actions.append(True, lock)
 
-    if not check_bank_legal(lock, bank, controller):
-        bank = False
+    lock = np.zeros(len(observation["dice_values"])
+    if check_bank_legal(lock, True, controller):
+        possible_actions.append(True, lock)
+
+    bank, lock = random.choice(possible_action)
+    # try:
+    #     lock = random.choice(get_legal_lock_combinations(observation))
+    #     lock = convert_lock_indices_to_list(lock, observation)
+    # except IndexError:
+    #     lock = np.zeros(len(observation["dice_values"]))
+    #
+    # if not check_bank_legal(lock, bank, controller):
+    #     bank = False
 
     if not check_lock_legal(lock, bank, controller):
         raise Exception("this is probably bad.")
