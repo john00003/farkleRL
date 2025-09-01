@@ -175,6 +175,10 @@ class FarkleEnv(gym.Env):
         self._dice_values = self.observation_space["dice_values"].sample() # just sample to simulate the first dice roll of a game
         self.log(f"New round! Player {self._turn}, you're up!")
 
+        temp_obs = self._get_obs()
+        self.print_dice(temp_obs, action)
+        self.print_lock(temp_obs, action)
+
     def _roll_unlocked_dice(self):
         """
         Reroll all dice that are not locked, updating their values in place.
@@ -412,7 +416,113 @@ class FarkleEnv(gym.Env):
 
         return True
 
+    def acknowledge_farkle(self):
+        """ acknowledge_farkle is called by the controller after a player has farkled. 
+        this will update the game to the next player's turn after the reward after banking has been safely consumed by the player.
+        """
+        assert self.check_farkle()
+
+        self._new_round()
+        terminated = False
+        truncated = False
+        reward = -1
+
+        observation = _get_obs()
+        info = _get_info()
+
+        return observation, reward, terminated, truncated, info
+
+    def acknowledge_bank():
+        """ acknowledge_bank is called by the controller after a player has banked.
+        this allows the game to move to the next player's turn after the reward after banking has been safely consumed by the player.
+
+        returns: the observation to give to the next player
+        """
+        self._new_round()
+        terminated = False
+        truncated = False
+        reward = -1
+
+        observation = _get_obs()
+        info = _get_info()
+
+        return observation, reward, terminated, truncated, info
+
     def step(self, action):
+        """
+        step is a function to implement Gymnasium's environment API
+
+        this function can return in four ways:
+            1) player wins. if a player could possibly win with the dice they locked this turn, they do so automatically
+            2) player banks. this function returns the reward to the player that banked in order to allow them to update.
+                the next FarkleEnv function called needs to be acknowledge_bank() by the controller
+            3) player does not bank, locks dice but then farkles. this function returns the reward to the player to allow them to update.
+            4) the player does not bank, locks dice but then does not farkle. this function returns the game state to the player to allow them to continue their turn
+
+        Parameters
+        ---------
+        action: dict
+            contains "lock": an array-like with a 1 in each index where the player would like to lock the dice,
+                     "bank": a boolean indicating if the player is banking after this turn
+
+        Returns
+        -------
+        observation: dict
+            contains "dice_values": an array-like with integer elements indicating the new value of each die
+                     "dice_locked": an array-like with a 1 in each index where a die is locked
+                     "player_points": an array-like with the points of each player (not including any potential points by the current player this turn)
+                     "turn": an integer indicating who's turn it is
+        """
+        self.log("Entering step function")
+        assert self.check_legal(action)
+
+        truncated = False
+        terminated = False
+
+        self.log("Updating locks")
+        self._update_locks(action["lock"])
+
+        points = self.calculate_points(self._dice_values, action["lock"]) # calculate the number of points scored by this action by using which dice were locked (THIS ACTION) by the player
+        self.log(f"Player's action received {points}.")
+        self._points_this_turn += points
+        self.log(f"Player now has {self._points_this_turn} this turn.")
+
+        if self._points_this_turn + self._player_points[self._turn] >= self.max_points:
+            self.log(f"Player {self._turn} has over {self.max_points}! They win!")
+            terminated = True
+            self._player_points[self._turn] += self._points_this_turn
+            reward = 0
+            observation = self._get_obs()
+            info = self._get_info()
+            return observation, reward, terminated, truncated, info
+        
+        if action["bank"]:
+            self._player_points[self._turn] += self._points_this_turn
+            self.log(f"Player {self._turn} banks. Expecting bank acknowledgement.")
+            reward = -1
+            observation = self._get_obs()
+            info = self._get_info()
+            return observation, reward, terminated, truncated, info
+
+        
+        if self._check_hot_dice(self._dice_locked):
+            self.hot_dice()
+        else:
+            self._roll_unlocked_dice() 
+
+        observation = self._get_obs()
+        self.print_dice(observation, action)
+        self.print_lock(observation, action)
+        # in both of these cases, player may have farkled
+        if info["farkle"]:
+            self.log(f"Player {self._turn} farkled. Expecting farkle acknowledgement.")
+            reward = -1
+            return observation, reward, terminated, truncated, info
+
+        reward = 0
+        return observation, reward, terminated, truncated, info
+
+    def step_old(self, action):
         """
         step is a function to implement Gymnasium's environment API
 
@@ -444,7 +554,7 @@ class FarkleEnv(gym.Env):
             reward = -1
             observation = self._get_obs()
             info = self._get_info()
-            return observation, reward, terminated, truncated, info
+            return oservation, reward, terminated, truncated, info
         assert self.check_legal(action)
         assert not self.check_farkle(self._dice_values, self._dice_locked)
 
@@ -471,11 +581,11 @@ class FarkleEnv(gym.Env):
         if not action["bank"]:
             if not hot_dice:
                 self._roll_unlocked_dice() # we
-                temp_obs = self._get_obs()
-                self.print_dice(temp_obs, action)
-                self.print_lock(temp_obs, action)
             else:
                 self._hot_dice()
+            temp_obs = self._get_obs()
+            self.print_dice(temp_obs, action)
+            self.print_lock(temp_obs, action)
             # in both of these cases, player may have farkled
             if self.check_farkle(self._dice_values, self._dice_locked):
                 # player farkled, give them negative reward
