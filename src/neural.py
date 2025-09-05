@@ -55,6 +55,11 @@ class ReplayMemory(object):
         return len(self.memory)
 
 if __name__ == "__main__":
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else
+        "mps" if torch.backends.mps.is_available() else
+        "cpu"
+    )
     # BATCH_SIZE is the number of transitions sampled from the replay buffer
     # GAMMA is the discount factor as mentioned in the previous section
     # EPS_START is the starting value of epsilon
