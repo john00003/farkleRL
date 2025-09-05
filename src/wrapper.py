@@ -79,14 +79,7 @@ class FarkleReducedStateWrapper(Wrapper):
 
 
     def observation(self, obs):
-        dice_values = []
-        for value, lock in zip(obs["dice_values"], obs["dice_locked"]):
-            if lock:
-                dice_values.append(0)
-            else:
-                dice_values.append(value)
-
-        dice_values.sort()
+        dice_values = self._get_new_dice_representation(obs["dice_values"], obs["dice_locked"])
 
         return {"dice_values": dice_values, "player_points": obs["player_points"], "points_this_turn": obs["points_this_turn"]}
 
@@ -95,5 +88,16 @@ class FarkleReducedStateWrapper(Wrapper):
         lock_copy = copy.deepcopy(self.env._dice_locked)
         new_rep = self._get_new_dice_representation(dice_copy, lock_copy)
         new_lock = [0] * len(dice_copy)
-        
 
+        dice_values_to_lock = []
+        for value, lock in zip(dice_copy, lock_copy):
+            if not lock:
+                continue
+            dice_values_to_lock.append(value)
+
+        for i, die in enumerate(new_rep):
+            if die in dice_values_to_lock:
+                new_lock[i] = 1
+                dice_values_to_lock.remove(die)
+        
+        return{"lock": new_lock, "bank": act["bank"]}
