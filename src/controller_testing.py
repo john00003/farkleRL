@@ -4,6 +4,7 @@ import testing
 import utility
 import player_testing
 import curses
+import wrapper
 
 class FarkleController:
 
@@ -31,6 +32,28 @@ class FarkleController:
 
     def log(self, string):
         print(f"CONTROLLER: {string}")
+
+    def _get_player_points(self, observation, player_turn):
+        """
+        Helper function to get player points, handling both wrapped and unwrapped environments.
+        
+        Parameters
+        ----------
+        observation : dict
+            Current observation from the environment
+        player_turn : int
+            Index of the player whose points to retrieve
+            
+        Returns
+        -------
+        int
+            The player's total points
+        """
+        player_points = observation["player_points"]
+        if isinstance(player_points, (list, np.ndarray)):
+            return player_points[player_turn]
+        else:
+            return player_points
 
     def print_action(self, observation, action):
         self.print_dice(observation, action)
@@ -150,15 +173,18 @@ class FarkleController:
 
         if terminated:
             assert info["winner"] != -1
-            self.log(f"Player {observation["turn"]} won! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {observation["player_points"][observation["turn"]]} points.")
+            total_points = self._get_player_points(observation, observation["turn"])
+            self.log(f"Player {observation["turn"]} won! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")
             return observation, reward, terminated, truncated, info
 
         if info["farkle"]:
-            self.log(f"Player {observation["turn"]} farkled! They would have got {observation["points_this_turn"]} points. They remain at {observation["player_points"][observation["turn"]]} points.")
+            total_points = self._get_player_points(observation, observation["turn"])
+            self.log(f"Player {observation["turn"]} farkled! They would have got {observation["points_this_turn"]} points. They remain at {total_points} points.")
             return self._farkle_step()
         elif action["bank"]:
             assert "lock" in action
-            self.log(f"Player {observation["turn"]} banked! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {observation["player_points"][observation["turn"]]} points.")
+            total_points = self._get_player_points(observation, observation["turn"])
+            self.log(f"Player {observation["turn"]} banked! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")
             return self._bank_step()
         else:
             raise Exception()
@@ -196,9 +222,9 @@ class FarkleController:
 
 if __name__ == "__main__":
     players = [player_testing.RandomPlayer()]
-    env = testing.FarkleEnv()
-    game = FarkleController(env, players)
+    env = testing.FarkleEnv(players=1)  # Create single-player environment
+    wrapped_env = wrapper.FarkleEnvSinglePlayerWrapper(env)  # Wrap it
+    game = FarkleController(wrapped_env, players)
     for player in players:
         player.set_controller(game)
     game.play_game()
-
