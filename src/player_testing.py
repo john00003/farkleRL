@@ -3,6 +3,13 @@ import numpy as np
 import random
 import copy
 from testing import FarkleEnv
+import torch
+from single_player_neural_network import (
+    FarkleTrainer, 
+    select_action_with_network, 
+    validate_and_convert_action, 
+    store_transition_and_train
+)
 
 # helper functions
 def get_legal_lock_combinations(observation):
@@ -160,45 +167,26 @@ def choose_random_action(observation, controller):
     Exception
         If no legal lock action could be chosen.
     """
-    """
-    this function selects a random action for the agent
-
-    Paramaters
-    ----------
-    observation: dict
-        and observation of the FarkleEnv
-
-    Returns
-    -------
-    lock: array-like
-        the selection of dice to lock, or an empty array if the decision to bank was made or it is not legal to lock anything
-    bank: boolean
-        a boolean indicating if the action is to bank
-    """
-    # bank = np.random.choice([True, False])
+    # Get all possible legal lock combinations
     possible_actions = []
-    for lock in get_legal_lock_combinations(observation):
-        lock = convert_lock_indices_to_list(lock, observation)
+    for lock_combo in get_legal_lock_combinations(observation):
+        lock = convert_lock_indices_to_list(lock_combo, observation)
         possible_actions.append((False, lock))
         if check_bank_legal(lock, True, controller):
-            possible_actions.append(True, lock)
+            possible_actions.append((True, lock))
 
-    lock = np.zeros(len(observation["dice_values"])
-    if check_bank_legal(lock, True, controller):
-        possible_actions.append(True, lock)
+    # Add empty lock with banking option if legal
+    empty_lock = np.zeros(len(observation["dice_values"]))
+    if check_bank_legal(empty_lock, True, controller):
+        possible_actions.append((True, empty_lock))
 
-    bank, lock = random.choice(possible_action)
-    # try:
-    #     lock = random.choice(get_legal_lock_combinations(observation))
-    #     lock = convert_lock_indices_to_list(lock, observation)
-    # except IndexError:
-    #     lock = np.zeros(len(observation["dice_values"]))
-    #
-    # if not check_bank_legal(lock, bank, controller):
-    #     bank = False
+    if not possible_actions:
+        raise Exception("No legal actions available.")
+
+    bank, lock = random.choice(possible_actions)
 
     if not check_lock_legal(lock, bank, controller):
-        raise Exception("this is probably bad.")
+        raise Exception("Selected illegal action.")
 
     return lock, bank
 
@@ -262,6 +250,91 @@ class RandomPlayer(Player):
     def update(self, observation, reward):
         # no need to update, this player is not an RL agent
         pass
+
+
+class SinglePlayerRLAgent(Player):
+    """
+    Reinforcement Learning agent for single-player Farkle using neural networks.
+    Simplified to use helper functions from single_player_neural_network.py
+    """
+    
+    def __init__(self, device='cpu', training=True):
+        super().__init__()
+        self.device = torch.device(device)
+        self.training = training
+        self.trainer = FarkleTrainer(device=self.device)
+        
+        # State tracking for experience replay
+        self.last_state = None
+        self.last_legal_mask = None
+        self.last_bank_action = None
+        self.last_lock_action = None
+        
+    def log(self, string):
+        if self.training:
+            print(f"RL AGENT: {string}")
+    
+    def play(self, observation):
+        """
+        Select an action using the neural network with helper functions.
+        """
+        # Use helper function to select action with network
+        bank_action, lock_action_idx, chosen_combination, state, legal_mask, legal_combinations = \
+            select_action_with_network(self.trainer, observation, get_legal_lock_combinations, self.training)
+        
+        # Use helper function to validate and convert action
+        lock_array, bank_action = validate_and_convert_action(
+            chosen_combination, bank_action, observation, 
+            convert_lock_indices_to_list, check_lock_legal, self.controller
+        )
+        
+        # Store current state and action for next update
+        self.last_state = state
+        self.last_legal_mask = legal_mask
+        self.last_bank_action = bank_action
+        self.last_lock_action = lock_action_idx
+        
+        if bank_action:
+            self.log(f"RL agent decided to bank with lock combination: {chosen_combination}")
+        else:
+            self.log(f"RL agent decided to lock dice: {chosen_combination}")
+        
+        return lock_array, bank_action
+    
+    def update(self, observation, reward):
+        """
+        Update the neural network with the received reward using helper function.
+        """
+        if not self.training or self.last_state is None:
+            return
+        
+        # Use helper function to store transition and train
+        store_transition_and_train(
+            self.trainer, self.last_state, self.last_legal_mask, 
+            self.last_bank_action, self.last_lock_action, reward,
+            observation, get_legal_lock_combinations, self.training
+        )
+        
+        self.log(f"Updated with reward: {reward}")
+    
+    def save_model(self, filepath):
+        """Save the trained model."""
+        torch.save(self.trainer.policy_net.state_dict(), filepath)
+        self.log(f"Model saved to {filepath}")
+    
+    def load_model(self, filepath):
+        """Load a trained model."""
+        self.trainer.policy_net.load_state_dict(torch.load(filepath, map_location=self.device))
+        self.trainer.target_net.load_state_dict(self.trainer.policy_net.state_dict())
+        self.log(f"Model loaded from {filepath}")
+    
+    def set_training_mode(self, training=True):
+        """Set whether the agent is in training mode or evaluation mode."""
+        self.training = training
+        if training:
+            self.trainer.policy_net.train()
+        else:
+            self.trainer.policy_net.eval()
 
 
 class ManualPlayer(Player):
