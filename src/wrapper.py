@@ -6,7 +6,10 @@ import copy
 class FarkleEnvSinglePlayerWrapper(ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
-        self.num_players = len(env.players)
+        # Ensure this wrapper is only used with single-player environments
+        if env.players != 1:
+            raise ValueError("FarkleEnvSinglePlayerWrapper can only be used with single-player environments")
+        
         # number of dice 
         self.dice = env.dice
         # number of points to win the game
@@ -15,14 +18,14 @@ class FarkleEnvSinglePlayerWrapper(ObservationWrapper):
         # observation space of environment
             # value of each die
             # bool for each die - True if locked, False otherwise
-            # points of each player
+            # player points (single integer instead of array)
             # amount of points the player has scored already in their turn
         self.observation_space = gym.spaces.Dict(
             {
-                "dice_values": gym.spaces.MultiDiscrete([6]*self.dice, seed=random_seed, start=[1]*self.dice),
+                "dice_values": gym.spaces.MultiDiscrete([6]*self.dice, start=[1]*self.dice),
                 "dice_locked": gym.spaces.MultiBinary(self.dice),
-                "player_points": gym.spaces.Box(0, max_points, shape=(1,), dtype=int),
-                "points_this_turn": gym.spaces.Box(0, max_points, dtype=int)
+                "player_points": gym.spaces.Box(0, self.max_points, dtype=int),
+                "points_this_turn": gym.spaces.Box(0, self.max_points, dtype=int)
             }
         )
 
@@ -30,7 +33,59 @@ class FarkleEnvSinglePlayerWrapper(ObservationWrapper):
         """ this function wraps the original observation space to reduce player_points from a list to a single integer
 
         """
-        return {"dice_values": obs["dice_values"], "dice_locked": obs["dice_locked"], "player_points": obs["player_points"][0], "points_this_turn": obs["points_this_turn"],
+        return {
+            "dice_values": obs["dice_values"], 
+            "dice_locked": obs["dice_locked"], 
+            "player_points": obs["player_points"][0], 
+            "points_this_turn": obs["points_this_turn"],
+            "turn": obs["turn"]
+        }
+
+    def reset(self, seed=None, options=None):
+        """
+        Override reset to properly handle seed parameter
+        """
+        obs, info = self.env.reset(seed=seed, options=options)
+        return self.observation(obs), info
+
+    def step(self, action):
+        """
+        Override step to wrap observations
+        """
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        return self.observation(obs), reward, terminated, truncated, info
+
+    def acknowledge_farkle(self):
+        """
+        Override acknowledge_farkle to wrap observations
+        """
+        obs, reward, terminated, truncated, info = self.env.acknowledge_farkle()
+        return self.observation(obs), reward, terminated, truncated, info
+
+    def acknowledge_bank(self):
+        """
+        Override acknowledge_bank to wrap observations
+        """
+        obs, reward, terminated, truncated, info = self.env.acknowledge_bank()
+        return self.observation(obs), reward, terminated, truncated, info
+
+    def check_legal(self, action):
+        """
+        Pass through legal check to the wrapped environment
+        """
+        return self.env.check_legal(action)
+
+    def check_lock_legal(self, action):
+        """
+        Pass through lock legal check to the wrapped environment
+        """
+        return self.env.check_lock_legal(action)
+
+    def check_bank_legal(self, action):
+        """
+        Pass through bank legal check to the wrapped environment
+        """
+        return self.env.check_bank_legal(action)
 
 
 class FarkleReducedStateWrapper(Wrapper):
