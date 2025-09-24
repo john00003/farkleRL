@@ -164,6 +164,9 @@ class FarkleTrainer:
             total_reward += reward
             turns += 1
 
+        # TODO: seeing way too little negative reward. in training game, it even logs more often that player is receiving negative reward than we are actually seeing here
+        raise Exception(f"reward: {total_reward}. turns: {turns}")
+
         return {
             "winner": info["winner"],
             "turns": turns,

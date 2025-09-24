@@ -318,18 +318,15 @@ class SinglePlayerRLAgent(Player):
         self.log(f"Updated with reward: {reward}")
     
     def save_model(self, filepath):
-        """Save the trained model."""
         torch.save(self.trainer.policy_net.state_dict(), filepath)
         self.log(f"Model saved to {filepath}")
     
     def load_model(self, filepath):
-        """Load a trained model."""
         self.trainer.policy_net.load_state_dict(torch.load(filepath, map_location=self.device))
         self.trainer.target_net.load_state_dict(self.trainer.policy_net.state_dict())
         self.log(f"Model loaded from {filepath}")
     
     def set_training_mode(self, training=True):
-        """Set whether the agent is in training mode or evaluation mode."""
         self.training = training
         if training:
             self.trainer.policy_net.train()

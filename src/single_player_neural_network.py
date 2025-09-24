@@ -316,7 +316,7 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
     if training:
         bank_action, lock_action_idx = trainer.select_action(state, legal_mask, legal_combinations)
     else:
-        # if not training, we are evaluations
+        # if not training, we are evaluating
         # use greedy selection, no exploration
         with torch.no_grad():
             state_batch = state.unsqueeze(0)
