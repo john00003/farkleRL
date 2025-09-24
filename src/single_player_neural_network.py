@@ -22,14 +22,13 @@ class FarkleNet(nn.Module):
         self.max_points = max_points
         self.max_lock_combinations = max_lock_combinations
         
-        # Input size calculation:
         # - dice_values: num_dice (values 1-6)
         # - dice_locked: num_dice (binary)
         # - player_points: 1 (normalized)
         # - points_this_turn: 1 (normalized)
         input_size = num_dice + num_dice + 1 + 1
         
-        # Shared layers
+        # layers shared between the two heads
         self.shared_layers = nn.Sequential(
             nn.Linear(input_size, 256),
             nn.ReLU(),
@@ -39,7 +38,7 @@ class FarkleNet(nn.Module):
             nn.ReLU()
         )
         
-        # Bank decision head (single output with sigmoid)
+        # bank decision head
         self.bank_head = nn.Sequential(
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -47,7 +46,7 @@ class FarkleNet(nn.Module):
             nn.Sigmoid()
         )
         
-        # Lock combination head (outputs logits for each possible combination)
+        # lock combination head
         self.lock_head = nn.Sequential(
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -67,18 +66,16 @@ class FarkleNet(nn.Module):
             bank_prob: Tensor of shape (batch_size, 1) with banking probabilities
             lock_logits: Tensor of shape (batch_size, max_lock_combinations) with lock logits
         """
-        # Shared feature extraction
         shared_features = self.shared_layers(state)
         
-        # Bank decision
+        # bank decision
         bank_prob = self.bank_head(shared_features)
         
-        # Lock combination logits
+        # lock combination logits
         lock_logits = self.lock_head(shared_features)
         
-        # Apply mask to lock logits if provided
         if legal_lock_mask is not None:
-            # Set illegal actions to very negative values
+            # illegal actions are very negative values
             lock_logits = lock_logits.masked_fill(legal_lock_mask == 0, -1e9)
         
         return bank_prob, lock_logits
@@ -107,20 +104,18 @@ def prepare_state_tensor(observation, device='cpu'):
     Returns:
         Tensor of shape (input_size,) ready for the network
     """
-    # Normalize dice values to [0, 1] range (1-6 becomes 0-5, then divide by 5)
+    # normalize dice values to [0, 1]
     dice_values = torch.tensor(observation["dice_values"], dtype=torch.float32) - 1.0
     dice_values = dice_values / 5.0
     
-    # Dice locked (already binary)
     dice_locked = torch.tensor(observation["dice_locked"], dtype=torch.float32)
     
-    # Normalize player points to [0, 1] range
+    # normalize player points
     player_points = torch.tensor([observation["player_points"]], dtype=torch.float32) / 10000.0
     
-    # Normalize points this turn to [0, 1] range
+    # normalize points this turn
     points_this_turn = torch.tensor([observation["points_this_turn"]], dtype=torch.float32) / 10000.0
     
-    # Concatenate all features
     state = torch.cat([dice_values, dice_locked, player_points, points_this_turn])
     
     return state.to(device)
@@ -148,7 +143,7 @@ def prepare_legal_mask(legal_combinations, max_combinations=64, device='cpu'):
     return mask.to(device)
 
 
-# Experience replay components
+# we define a state, action, next action transition
 Transition = namedtuple('Transition', ('state', 'legal_mask', 'bank_action', 'lock_action', 'reward', 'next_state', 'next_legal_mask', 'done'))
 
 class ReplayMemory:
@@ -158,11 +153,9 @@ class ReplayMemory:
         self.memory = deque([], maxlen=capacity)
     
     def push(self, *args):
-        """Save a transition."""
         self.memory.append(Transition(*args))
     
     def sample(self, batch_size):
-        """Sample a batch of transitions."""
         return random.sample(self.memory, batch_size)
     
     def __len__(self):
@@ -183,17 +176,17 @@ class FarkleTrainer:
         self.epsilon_decay = epsilon_decay
         self.steps_done = 0
         
-        # Networks
+        # define a policy and target network
         self.policy_net = FarkleNet().to(device)
         self.target_net = FarkleNet().to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         
-        # Optimizer and memory
+        # Adam optimizer
         self.optimizer = torch.optim.AdamW(self.policy_net.parameters(), lr=learning_rate)
         self.memory = ReplayMemory(memory_capacity)
         
-        # Loss functions
+        # loss functions
         self.bank_criterion = nn.BCELoss()
         self.lock_criterion = nn.CrossEntropyLoss()
     
@@ -210,18 +203,18 @@ class FarkleTrainer:
         self.steps_done += 1
         
         if random.random() > eps_threshold:
-            # Exploit: use the network
+            # exploitation
             with torch.no_grad():
                 state_batch = state.unsqueeze(0)
                 legal_mask_batch = legal_lock_mask.unsqueeze(0)
                 
                 bank_prob, lock_probs = self.policy_net.get_action_probabilities(state_batch, legal_mask_batch)
                 
-                # Sample actions from the probability distributions
+                # sample action from output probabilities
                 bank_action = torch.bernoulli(bank_prob).item() > 0.5
                 lock_action = torch.multinomial(lock_probs, 1).item()
         else:
-            # Explore: random action
+            # exploration
             bank_action = random.choice([True, False])
             lock_action = random.choice(range(len(legal_combinations)))
         
@@ -235,26 +228,21 @@ class FarkleTrainer:
         transitions = self.memory.sample(batch_size)
         batch = Transition(*zip(*transitions))
         
-        # Convert to tensors
+        # convert to tensors
         state_batch = torch.stack(batch.state)
         legal_mask_batch = torch.stack(batch.legal_mask)
         bank_action_batch = torch.tensor(batch.bank_action, dtype=torch.float32).unsqueeze(1)
         lock_action_batch = torch.tensor(batch.lock_action, dtype=torch.long)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32)
         
-        # Compute current Q values
+        # compute current Q values
         bank_probs, lock_logits = self.policy_net(state_batch, legal_mask_batch)
         
-        # Bank loss
+        # apply loss functions
         bank_loss = self.bank_criterion(bank_probs, bank_action_batch)
-        
-        # Lock loss
         lock_loss = self.lock_criterion(lock_logits, lock_action_batch)
-        
-        # Total loss
         total_loss = bank_loss + lock_loss
         
-        # Optimize
         self.optimizer.zero_grad()
         total_loss.backward()
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
@@ -281,11 +269,13 @@ def prepare_legal_combinations_with_indices(legal_combinations):
         legal_combinations: Processed list with empty combination added if needed
         legal_indices: List of indices corresponding to each legal combination
     """
+    # TODO: validate
     # Validate no invalid combinations
     if [0,0,0,0,0,0] in legal_combinations:
         raise Exception("Invalid legal combination detected")
     
     # Always add the empty combination (no dice locked) as index 0
+    # TODO: validate
     if [] not in legal_combinations:
         legal_combinations.insert(0, [])
     
@@ -313,24 +303,21 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
         legal_mask: Legal action mask tensor (for storing in replay buffer)
         legal_combinations: List of legal combinations (for validation)
     """
-    # Get legal lock combinations
     legal_combinations = legal_combinations_fn(observation)
     legal_combinations, legal_indices = prepare_legal_combinations_with_indices(legal_combinations)
     
     if len(legal_combinations) == 0:
         raise Exception("No legal lock combinations available.")
     
-    # Prepare state tensor
     state = prepare_state_tensor(observation, trainer.device)
     
-    # Prepare legal action mask
     legal_mask = prepare_legal_mask(legal_indices, device=trainer.device)
     
-    # Get action from neural network
     if training:
         bank_action, lock_action_idx = trainer.select_action(state, legal_mask, legal_combinations)
     else:
-        # For evaluation, use greedy policy
+        # if not training, we are evaluations
+        # use greedy selection, no exploration
         with torch.no_grad():
             state_batch = state.unsqueeze(0)
             legal_mask_batch = legal_mask.unsqueeze(0)
@@ -340,7 +327,7 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
             bank_action = bank_prob.item() > 0.5
             lock_action_idx = torch.argmax(lock_probs, dim=-1).item()
     
-    # Convert lock action index to actual dice combination
+    # convert lock action index to actual dice combination
     if lock_action_idx < len(legal_combinations):
         chosen_combination = legal_combinations[lock_action_idx]
     else:
@@ -365,22 +352,17 @@ def validate_and_convert_action(chosen_combination, bank_action, observation, co
         lock_array: Binary array indicating which dice to lock
         bank_action: Validated bank action (may be forced to False if banking is illegal)
     """
-    # Convert to lock array format
+    # convert to lock array format
     lock_array = convert_lock_indices_fn(chosen_combination, observation)
     
-    # Check if the lock action itself is legal
-    if not check_lock_legal_fn(lock_array, False, controller):  # Check lock without banking first
+    if not check_lock_legal_fn(lock_array, False, controller):  # consider no banking, since choice to bank can be adjusted easily
+        # exception must be raised if lock is not legal - mask must be wrong.
         raise Exception("Selected illegal lock combination!")
     
-    # If agent wants to bank, check if banking is legal with this lock combination
     if bank_action:
         if not controller.check_bank_legal({"lock": lock_array, "bank": True}):
             # Banking is illegal, force bank_action to False
             bank_action = False
-    
-    # Final validation of the complete action
-    if not controller.check_legal({"lock": lock_array, "bank": bank_action}):
-        raise Exception("Selected illegal action after validation!")
     
     return lock_array, bank_action
 
@@ -404,8 +386,8 @@ def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_act
     if not training:
         return
     
-    # Prepare next state if not done
-    done = reward != 0  # Non-zero reward typically indicates end of turn or game
+    # prepare next state if turn not done
+    done = reward != 0
     
     if not done and next_observation is not None:
         next_legal_combinations = legal_combinations_fn(next_observation)
@@ -416,7 +398,6 @@ def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_act
         next_state = None
         next_legal_mask = None
     
-    # Store transition in replay memory
     trainer.memory.push(
         state,
         legal_mask,
@@ -428,9 +409,8 @@ def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_act
         done
     )
     
-    # Perform optimization step
     trainer.optimize_model()
     
-    # Update target network periodically
+    # update target network periodically
     if trainer.steps_done % 100 == 0:
         trainer.update_target_network()
