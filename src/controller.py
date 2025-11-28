@@ -176,12 +176,13 @@ class FarkleController:
             self.log(f"Player {observation["turn"]} won! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")
             return observation, reward, terminated, truncated, info, 0
 
-        curr_player_reward = -1
         if info["farkle"]:
+            curr_player_reward = reward
             total_points = self._get_player_points(observation, observation["turn"])
             self.log(f"Player {observation["turn"]} farkled! They would have got {observation["points_this_turn"]} points. They remain at {total_points} points.")
             return (*self._farkle_step(), curr_player_reward)
         elif action["bank"]:
+            curr_player_reward = reward
             assert "lock" in action
             total_points = self._get_player_points(observation, observation["turn"])
             self.log(f"Player {observation["turn"]} banked! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")

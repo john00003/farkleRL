@@ -2,6 +2,170 @@ import numpy as np
 import gymnasium as gym
 import utility
 from gymnasium.envs.registration import register
+import copy
+
+# Memoization cache for legal lock combinations
+_LEGAL_COMBINATIONS_CACHE = {}
+
+def _helper_flip_lock(string, dice_values, dice_locked):
+    """
+    returns a new array of which dice are locked after the player has attempted to lock a combination of dice
+
+    Parameters
+    ----------
+    string: string
+        a string indicating the values of the dice the player is trying to lock
+    dice_values: array-like
+        an array of integers indicating the value of each die in each position
+    dice_locked: array-like
+        0 if the die is unlocked, 1 otherwise
+
+    Returns
+    -------
+    new_locked: array-like
+        0 if the die was previously unlocked, but we are locking it, 1 otherwise
+    """
+    new_locked = list(dice_locked)
+    for char in string:
+        x = int(char)
+        for i, value in enumerate(dice_values): # we find a dice of matching value and undo the lock
+            if value == x and new_locked[i] == 0:
+                new_locked[i] = 1
+                break
+    return new_locked
+
+def get_legal_lock_combinations(observation):
+    """
+    determine all legal combinations of dice to lock, given the current state.
+
+    Parameters
+    ----------
+    observation : dict
+        observation from the farkle environment. Must contain:
+            - "dice_locked": list[int]
+                1 if the die is currently locked, 0 otherwise
+            - "dice_values": list[int]
+                current values rolled for each die
+
+    Returns
+    -------
+    combinations : list[list[int]]
+        a list of possible dice index selections that may be locked.
+        each inner list contains indices (into dice_values) of dice
+        that can be locked together. 
+    """
+    dice_locked = observation["dice_locked"]
+    dice_values = observation["dice_values"]
+    
+    # convert to tuples for cache key
+    key = (tuple(dice_values), tuple(dice_locked))
+    
+    if key in _LEGAL_COMBINATIONS_CACHE:
+        return copy.deepcopy(_LEGAL_COMBINATIONS_CACHE[key])
+
+    result = get_legal_lock_combinations_wrapped(dice_values, dice_locked)
+    _LEGAL_COMBINATIONS_CACHE[key] = copy.deepcopy(result)
+    
+    # Check if banking with 0 new locks is legal (score >= 500)
+    # We need to handle both wrapped (scalar) and unwrapped (array) player_points
+    player_points = observation["player_points"]
+    if isinstance(player_points, (list, np.ndarray)):
+        current_points = player_points[observation["turn"]]
+    else:
+        current_points = player_points
+        
+    points_pending = observation["points_this_turn"]
+    
+    # If we have enough points to bank, "Lock Nothing" ([]) is a valid action
+    # (implying we will just bank what we have)
+    if [] in result:
+        print(f"super badness correct")
+    if current_points >= 500:
+        if points_pending > 0 and [] not in result:
+            result.insert(0, [])
+    else:
+        if points_pending >= 500 and [] not in result:
+            result.insert(0, [])
+
+    if [] in result:
+        print(f"super badness correct 2")
+        
+
+    return result
+
+def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
+    """
+    recursive helper to enumerate all possible legal lock combinations.
+
+    Parameters
+    ----------
+    dice_values : list[int]
+        values of the dice currently rolled.
+    dice_locked : list[int]
+        1 if the die is already locked, 0 otherwise.
+
+    Returns
+    -------
+    combinations : list[list[int]]
+        all possible index sets of dice that may be locked,
+        constructed recursively from valid scoring subsets.
+    """
+    unlocked = []
+    unlocked_indices = []
+    num_unlocked = 0
+    for i, (lock, die) in enumerate(zip(dice_locked, dice_values)):
+        if not lock:
+            unlocked.append(die)
+            unlocked_indices.append(i)
+            num_unlocked += 1
+    
+    # Base case: no unlocked dice
+    if num_unlocked == 0:
+        return []
+        
+    # sort the unlocked dice, but maintain order of indices of those dice
+    order = sorted(range(len(unlocked)), key=lambda i: unlocked[i])
+    unlocked = [str(unlocked[i]) for i in order]
+    unlocked_indices = [unlocked_indices[i] for i in order]
+    combinations = []
+    string = "".join(unlocked)
+    
+    for i in range(1, num_unlocked+1):
+        for dict_combo in FarkleEnv.combinations[i]:
+            for key in dict_combo.keys():
+                index = string.find(key)
+                if index == -1: continue
+                
+                curr_combinations = []
+                # append the indices that we are allowed to lock
+                curr_combinations.append(unlocked_indices[index:index+len(key)]) 
+                
+                # we get the possible combinations of dice to lock without the dice that we locked in the current recursion level
+                # Note: recursion here doesn't use the top-level cache to avoid circular dependency/complexity,
+                # but internal recursion could also be cached if needed. For now, top-level cache is big win.
+                new_locked = _helper_flip_lock(key, dice_values, dice_locked)
+                additional = get_legal_lock_combinations_wrapped(dice_values, new_locked)
+                
+                curr_combinations.extend(additional)
+                for combo in curr_combinations:
+                    if len(set(combo)) != len(combo):
+                         # Should not happen if logic is correct
+                        continue
+                
+                # we get the combinations formed by adding the current combination to the remaining combinations found by recursing
+                additional_with_original = copy.deepcopy(additional)
+                for combo in additional_with_original:
+                    combo.extend(unlocked_indices[index:index+len(key)])
+                
+                curr_combinations.extend(additional_with_original)
+                
+                # sort and do not add duplicates
+                for combo in curr_combinations:
+                    combo.sort()
+                    if combo not in combinations:
+                        combinations.append(combo)
+
+    return combinations
 
 
 class FarkleEnv(gym.Env):
@@ -213,12 +377,26 @@ class FarkleEnv(gym.Env):
         if not all(x == 0 for x in lock_action):    # if the player is locking anything, make sure it's valid
             assert self.verify_combo(self._dice_values, lock_action)
             assert self.calculate_points(self._dice_values, lock_action) != 0
+        else:
+            # not legal to lock nothing unless banking
+            print(f"Inside check_lock_legal, action: {action}")
+            if not action["bank"]:
+                return False
+            try:
+                self.check_bank_legal(action) # not legal to lock nothing and bank when banking is illegal
+            except AssertionError:
+                return False
 
         return True
 
     def check_bank_legal(self, action):
+        
         if action["bank"]:
-            assert self._points_this_turn + self._player_points[self._turn] + self.calculate_points(self._dice_values, action["lock"]) >= 500
+            if self._player_points[self._turn] >= 500:
+                assert self._points_this_turn + self.calculate_points(self._dice_values, action["lock"]) > 0
+            else:
+                assert self._player_points[self._turn] == 0
+                assert self._points_this_turn + self.calculate_points(self._dice_values, action["lock"]) >= 500
 
         return True
 
@@ -394,8 +572,8 @@ class FarkleEnv(gym.Env):
         """
         try:
             self.check_lock_legal(action)
-        except AssertionError:
-            self.log(f"Player {self._turn} attempted to lock illegal dice") 
+        except AssertionError as e:
+            self.log(f"Player {self._turn} attempted to lock illegal dice: {e}") 
             return False
 
         if action["bank"] and (self._player_points[self._turn] + self._points_this_turn + self.calculate_points(self._dice_values, action["lock"]) < 500):
@@ -468,6 +646,7 @@ class FarkleEnv(gym.Env):
                      "turn": an integer indicating who's turn it is
         """
         self.log("Entering step function")
+        print(action)
         assert self.check_legal(action)
 
         truncated = False
@@ -493,7 +672,7 @@ class FarkleEnv(gym.Env):
         if action["bank"]:
             self._player_points[self._turn] += self._points_this_turn
             self.log(f"Player {self._turn} banks. Expecting bank acknowledgement.")
-            reward = -1
+            reward = -1 + (self._points_this_turn / self.max_points)
             observation = self._get_obs()
             info = self._get_info(True)
             return observation, reward, terminated, truncated, info

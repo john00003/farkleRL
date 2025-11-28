@@ -9,7 +9,9 @@ import farkle as testing
 import wrapper
 
 
-class FarkleTrainer:
+from dqn_agent import DQNAgent
+
+class TrainingRunner:
     """
     Training class for the Farkle RL agent that handles multiple games and tracks performance.
     """
@@ -316,22 +318,25 @@ def setup_training_environment():
     
     Returns
     -------
-    trainer : FarkleTrainer
+    trainer : TrainingRunner
         Configured trainer ready for training
     """
-    # Create RL agent
-    rl_agent = player_testing.SinglePlayerRLAgent(training=True)
+    # Create DQN Agent (Brain)
+    dqn_agent = DQNAgent()
+    
+    # Create RL player with the agent
+    rl_player = player_testing.SinglePlayerRLAgent(agent=dqn_agent, training=True)
     
     # Create environment and controller
     env = testing.FarkleEnv(players=1)
     wrapped_env = wrapper.FarkleEnvSinglePlayerWrapper(env)
-    controller = FarkleController(wrapped_env, [rl_agent])
+    controller = FarkleController(wrapped_env, [rl_player])
     
-    # Set controller for agent
-    rl_agent.set_controller(controller)
+    # Set controller for player
+    rl_player.set_controller(controller)
     
-    # Create trainer
-    trainer = FarkleTrainer(controller)
+    # Create training runner
+    trainer = TrainingRunner(controller)
     
     return trainer
 

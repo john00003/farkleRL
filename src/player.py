@@ -3,130 +3,15 @@ import numpy as np
 import random
 import copy
 import torch
-from farkle import FarkleEnv
-from single_player_neural_network import (
-    FarkleTrainer, 
+from farkle import FarkleEnv, get_legal_lock_combinations
+from dqn_agent import (
+    DQNAgent, 
     select_action_with_network, 
     validate_and_convert_action, 
     store_transition_and_train
 )
 
 # helper functions
-def get_legal_lock_combinations(observation):
-    """
-    Determine all legal combinations of dice to lock, given the current state.
-
-    Parameters
-    ----------
-    observation : dict
-        Observation from the Farkle environment. Must contain:
-            - "dice_locked": list[int]
-                1 if the die is currently locked, 0 otherwise
-            - "dice_values": list[int]
-                current values rolled for each die
-
-    Returns
-    -------
-    combinations : list[list[int]]
-        A list of possible dice index selections that may be locked.
-        Each inner list contains indices (into dice_values) of dice
-        that can be locked together. 
-
-        NOTE: This is not in the action format expected by FarkleEnv;
-        it must be converted before being passed as an action.
-    """
-    dice_locked = observation["dice_locked"]
-    dice_values = observation["dice_values"]
-
-    return get_legal_lock_combinations_wrapped(dice_values, dice_locked)
-
-def _helper_flip_lock(string, dice_values, dice_locked):
-    """
-    returns a new array of which dice are locked after the player has attempted to lock a combination of dice
-
-    Parameters
-    ----------
-    string: string
-        a string indicating the values of the dice the player is trying to lock
-    dice_values: array-like
-        an array of integers indicating the value of each die in each position
-    dice_locked: array-like
-        0 if the die is unlocked, 1 otherwise
-
-    Returns
-    -------
-    new_locked: array-like
-        0 if the die was previously unlocked, but we are locking it, 1 otherwise
-    """
-    new_locked = [x for x in dice_locked]
-    for char in string:
-        x = int(char)
-        for i, value in enumerate(dice_values): # we find a dice of matching value and undo the lock
-            if value == x and new_locked[i] == 0:
-                new_locked[i] = 1
-                break
-    return new_locked
-
-def get_legal_lock_combinations_wrapped(dice_values, dice_locked):
-    """
-    Recursive helper to enumerate all possible legal lock combinations.
-
-    Parameters
-    ----------
-    dice_values : list[int]
-        Values of the dice currently rolled.
-    dice_locked : list[int]
-        1 if the die is already locked, 0 otherwise.
-
-    Returns
-    -------
-    combinations : list[list[int]]
-        All possible index sets of dice that may be locked,
-        constructed recursively from valid scoring subsets.
-    """
-    unlocked = []
-    unlocked_indices = []
-    num_unlocked = 0
-    for i, (lock, die) in enumerate(zip(dice_locked, dice_values)):
-        if not lock:
-            unlocked.append(die)
-            unlocked_indices.append(i)
-            num_unlocked += 1
-    # sort the unlocked dice, but maintain order of indices of those dice
-    order = sorted(range(len(unlocked)), key=lambda i: unlocked[i])
-    unlocked = [str(unlocked[i]) for i in order]
-    unlocked_indices = [unlocked_indices[i] for i in order]
-    combinations = []
-    string = "".join(unlocked)
-    for i in range(1, num_unlocked+1):
-        for dict in FarkleEnv.combinations[i]:
-            for key in dict.keys():
-                index = string.find(key)
-                if index == -1: continue
-                curr_combinations = []
-                curr_combinations.append(unlocked_indices[index:index+len(key)]) # append the indices that we are allowed to lock
-                # we get the possible combinations of dice to lock without the dice that we locked in the current recursion level
-                additional = get_legal_lock_combinations_wrapped(dice_values, _helper_flip_lock(key, dice_values, dice_locked)) #TODO: does this work?
-                curr_combinations.extend(additional)
-                for combo in curr_combinations:
-                    if len(set(combo)) != len(combo):
-                        raise Exception("badness")
-                # we get the combinations formed by adding the current combination to the remaining combinations found by recursing
-                additional_with_original = copy.deepcopy(additional)
-                for combo in additional_with_original:
-                    assert unlocked_indices[index:index+len(key)] not in combo
-                    combo.extend(unlocked_indices[index:index+len(key)])
-                curr_combinations.extend(additional_with_original)
-                for combo in curr_combinations:
-                    if len(set(combo)) != len(combo):
-                        raise Exception("badness two")
-                # sort and do not add duplicates
-                for combo in curr_combinations:
-                    combo.sort()
-                    if combo not in combinations:
-                        combinations.append(combo)
-
-    return combinations
 
 def check_lock_legal(lock, bank, controller):
     action = {"lock": lock, "bank": bank}
@@ -255,14 +140,18 @@ class RandomPlayer(Player):
 class SinglePlayerRLAgent(Player):
     """
     Reinforcement Learning agent for single-player Farkle using neural networks.
-    Simplified to use helper functions from single_player_neural_network.py
+    Simplified to use helper functions from dqn_agent.py
     """
     
-    def __init__(self, device='cpu', training=True):
+    def __init__(self, agent=None, device='cpu', training=True):
         super().__init__()
         self.device = torch.device(device)
         self.training = training
-        self.trainer = FarkleTrainer(device=self.device)
+        # Decoupled: Accept an agent instance or create one if not provided
+        if agent is None:
+            self.agent = DQNAgent(device=self.device)
+        else:
+            self.agent = agent
         
         # State tracking for experience replay
         self.last_state = None
@@ -280,7 +169,7 @@ class SinglePlayerRLAgent(Player):
         """
         # Use helper function to select action with network
         bank_action, lock_action_idx, chosen_combination, state, legal_mask, legal_combinations = \
-            select_action_with_network(self.trainer, observation, get_legal_lock_combinations, self.training)
+            select_action_with_network(self.agent, observation, get_legal_lock_combinations, self.training)
         
         # Use helper function to validate and convert action
         lock_array, bank_action = validate_and_convert_action(
@@ -299,7 +188,7 @@ class SinglePlayerRLAgent(Player):
         else:
             self.log(f"RL agent decided to lock dice: {chosen_combination}")
 
-        self.log(f"RL agent currently has {state['player_points']} points")
+        self.log(f"RL agent currently has {observation["player_points"]} points")
         
         return lock_array, bank_action
     
@@ -312,7 +201,7 @@ class SinglePlayerRLAgent(Player):
         
         # Use helper function to store transition and train
         store_transition_and_train(
-            self.trainer, self.last_state, self.last_legal_mask, 
+            self.agent, self.last_state, self.last_legal_mask, 
             self.last_bank_action, self.last_lock_action, reward,
             observation, get_legal_lock_combinations, self.training
         )
@@ -320,20 +209,21 @@ class SinglePlayerRLAgent(Player):
         self.log(f"Updated with reward: {reward}")
     
     def save_model(self, filepath):
-        torch.save(self.trainer.policy_net.state_dict(), filepath)
+        torch.save(self.agent.policy_net.state_dict(), filepath)
         self.log(f"Model saved to {filepath}")
     
     def load_model(self, filepath):
-        self.trainer.policy_net.load_state_dict(torch.load(filepath, map_location=self.device))
-        self.trainer.target_net.load_state_dict(self.trainer.policy_net.state_dict())
+        self.agent.policy_net.load_state_dict(torch.load(filepath, map_location=self.device))
+        self.agent.target_net.load_state_dict(self.agent.policy_net.state_dict())
         self.log(f"Model loaded from {filepath}")
     
     def set_training_mode(self, training=True):
         self.training = training
         if training:
-            self.trainer.policy_net.train()
+            self.agent.policy_net.train()
         else:
-            self.trainer.policy_net.eval()
+            self.agent.policy_net.eval()
+
 
 
 class ManualPlayer(Player):
