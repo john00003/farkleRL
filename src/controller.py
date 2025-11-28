@@ -1,9 +1,8 @@
 import gymnasium as gym
 import numpy as np
-import testing
+import farkle as testing
 import utility
-import player_testing
-import curses
+import player as player_testing
 import wrapper
 
 class FarkleController:
@@ -156,7 +155,7 @@ class FarkleController:
             # the player farkled off the bat
             player.update(observation, reward)
             # we prompt the environment to move to a new round for the next player's turn
-            return self._farkle_step()
+            return (*self._farkle_step(), -1)
 
         action = {"bank": False}
         while not info["farkle"] and not action["bank"] and info["winner"] == -1 and not terminated and not truncated:
@@ -175,17 +174,18 @@ class FarkleController:
             assert info["winner"] != -1
             total_points = self._get_player_points(observation, observation["turn"])
             self.log(f"Player {observation["turn"]} won! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")
-            return observation, reward, terminated, truncated, info
+            return observation, reward, terminated, truncated, info, 0
 
+        curr_player_reward = -1
         if info["farkle"]:
             total_points = self._get_player_points(observation, observation["turn"])
             self.log(f"Player {observation["turn"]} farkled! They would have got {observation["points_this_turn"]} points. They remain at {total_points} points.")
-            return self._farkle_step()
+            return (*self._farkle_step(), curr_player_reward)
         elif action["bank"]:
             assert "lock" in action
             total_points = self._get_player_points(observation, observation["turn"])
             self.log(f"Player {observation["turn"]} banked! They got {observation["points_this_turn"]} points this turn, bringing them to a total of {total_points} points.")
-            return self._bank_step()
+            return (*self._bank_step(), curr_player_reward)
         else:
             raise Exception()
 
@@ -208,16 +208,23 @@ class FarkleController:
         terminated = False
         reward = -1 if info["farkle"] else 0
         turns = 0 # TODO: only applicable to single player
-        total_reward = 0
+        total_reward = 0 # TODO: only applicable to single player
 
         while info["winner"] == -1 and not truncated and not terminated: # while game is not over TODO: consider truncated or terminated?
             current_player = observation["turn"]
             self.log(f"Start of player {current_player}'s turn.")
-            observation, reward, terminated, truncated, info = self.play_turn(self.players[observation["turn"]], observation, info, reward, terminated, truncated)
-            total_reward += reward
+            observation, reward, terminated, truncated, info, curr_player_reward = self.play_turn(self.players[observation["turn"]], observation, info, reward, terminated, truncated)
+            # total_reward += reward
+            total_reward += curr_player_reward
             turns += 1
 
         self.log(f"Winner is player {info['winner']}! It took a total of {turns} turns to win!")
+
+        return {
+            "winner": info["winner"],
+            "turns": turns,
+            "total_reward": total_reward
+        }
 
 
 if __name__ == "__main__":

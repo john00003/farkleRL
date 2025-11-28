@@ -38,12 +38,11 @@ class FarkleNet(nn.Module):
             nn.ReLU()
         )
         
-        # bank decision head
+        # bank decision head (outputs Q-value, not probability)
         self.bank_head = nn.Sequential(
             nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+            nn.Linear(64, 1)
         )
         
         # lock combination head
@@ -187,12 +186,12 @@ class FarkleTrainer:
         self.memory = ReplayMemory(memory_capacity)
         
         # loss functions
-        self.bank_criterion = nn.BCELoss()
-        self.lock_criterion = nn.CrossEntropyLoss()
+        # self.bank_criterion = nn.BCELoss()
+        # self.lock_criterion = nn.CrossEntropyLoss()
     
     def select_action(self, state, legal_lock_mask, legal_combinations):
         """
-        Select an action using epsilon-greedy strategy.
+        Select an action using epsilon-greedy strategy with Q-values.
         
         Returns:
             bank_action: Boolean indicating whether to bank
@@ -203,16 +202,18 @@ class FarkleTrainer:
         self.steps_done += 1
         
         if random.random() > eps_threshold:
-            # exploitation
+            # exploitation - use Q-values to select best actions
             with torch.no_grad():
                 state_batch = state.unsqueeze(0)
                 legal_mask_batch = legal_lock_mask.unsqueeze(0)
                 
-                bank_prob, lock_probs = self.policy_net.get_action_probabilities(state_batch, legal_mask_batch)
+                bank_q_value, lock_q_values = self.policy_net(state_batch, legal_mask_batch)
                 
-                # sample action from output probabilities
-                bank_action = torch.bernoulli(bank_prob).item() > 0.5
-                lock_action = torch.multinomial(lock_probs, 1).item()
+                # Banking decision: bank if Q-value > 0 (or some threshold)
+                bank_action = bank_q_value.item() > 0.0
+                
+                # Lock decision: choose action with highest Q-value
+                lock_action = torch.argmax(lock_q_values, dim=-1).item()
         else:
             # exploration
             bank_action = random.choice([True, False])
@@ -221,7 +222,7 @@ class FarkleTrainer:
         return bank_action, lock_action
     
     def optimize_model(self, batch_size=32):
-        """Perform one step of optimization on the policy network."""
+        """Perform one step of optimization on the policy network using DQN Q-value learning."""
         if len(self.memory) < batch_size:
             return
         
@@ -234,15 +235,43 @@ class FarkleTrainer:
         bank_action_batch = torch.tensor(batch.bank_action, dtype=torch.float32).unsqueeze(1)
         lock_action_batch = torch.tensor(batch.lock_action, dtype=torch.long)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32)
+        done_batch = torch.tensor(batch.done, dtype=torch.bool)
         
-        # compute current Q values
-        bank_probs, lock_logits = self.policy_net(state_batch, legal_mask_batch)
+        # Handle next states (some may be None for terminal states)
+        non_final_mask = torch.tensor([s is not None for s in batch.next_state], dtype=torch.bool)
+        if any(non_final_mask):
+            non_final_next_states = torch.stack([s for s in batch.next_state if s is not None])
+            non_final_next_legal_masks = torch.stack([m for m in batch.next_legal_mask if m is not None])
         
-        # apply loss functions
-        bank_loss = self.bank_criterion(bank_probs, bank_action_batch)
-        lock_loss = self.lock_criterion(lock_logits, lock_action_batch)
+        # Compute current Q-values from policy network
+        bank_q_values, lock_logits = self.policy_net(state_batch, legal_mask_batch)
+        
+        # Get Q-values for the actions that were actually taken
+        bank_state_action_values = bank_q_values.squeeze(1)  # Remove extra dimension
+        lock_state_action_values = lock_logits.gather(1, lock_action_batch.unsqueeze(1)).squeeze(1)
+        
+        # Compute target Q-values using target network
+        bank_next_state_values = torch.zeros(batch_size, device=self.device)
+        lock_next_state_values = torch.zeros(batch_size, device=self.device)
+        
+        if any(non_final_mask):
+            with torch.no_grad():
+                next_bank_q, next_lock_logits = self.target_net(non_final_next_states, non_final_next_legal_masks)
+                bank_next_state_values[non_final_mask] = next_bank_q.squeeze(1)
+                lock_next_state_values[non_final_mask] = next_lock_logits.max(1)[0]
+        
+        # Compute target values using Bellman equation: Q_target = reward + gamma * max_Q(next_state)
+        # For terminal states (done=True), next_state_value should be 0
+        bank_target_values = reward_batch + (self.gamma * bank_next_state_values * ~done_batch)
+        lock_target_values = reward_batch + (self.gamma * lock_next_state_values * ~done_batch)
+        
+        # Compute loss using Smooth L1 Loss (Huber loss) - standard for DQN
+        bank_loss = F.smooth_l1_loss(bank_state_action_values, bank_target_values)
+        lock_loss = F.smooth_l1_loss(lock_state_action_values, lock_target_values)
+        
         total_loss = bank_loss + lock_loss
         
+        # Optimize the model
         self.optimizer.zero_grad()
         total_loss.backward()
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
@@ -317,15 +346,18 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
         bank_action, lock_action_idx = trainer.select_action(state, legal_mask, legal_combinations)
     else:
         # if not training, we are evaluating
-        # use greedy selection, no exploration
+        # use greedy selection based on Q-values, no exploration
         with torch.no_grad():
             state_batch = state.unsqueeze(0)
             legal_mask_batch = legal_mask.unsqueeze(0)
             
-            bank_prob, lock_probs = trainer.policy_net.get_action_probabilities(state_batch, legal_mask_batch)
+            bank_q_value, lock_q_values = trainer.policy_net(state_batch, legal_mask_batch)
             
-            bank_action = bank_prob.item() > 0.5
-            lock_action_idx = torch.argmax(lock_probs, dim=-1).item()
+            # Banking decision: bank if Q-value > 0
+            bank_action = bank_q_value.item() > 0.0
+            
+            # Lock decision: choose action with highest Q-value
+            lock_action_idx = torch.argmax(lock_q_values, dim=-1).item()
     
     # convert lock action index to actual dice combination
     if lock_action_idx < len(legal_combinations):

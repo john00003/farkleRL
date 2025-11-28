@@ -2,8 +2,8 @@ import gymnasium as gym
 import numpy as np
 import random
 import copy
-from testing import FarkleEnv
 import torch
+from farkle import FarkleEnv
 from single_player_neural_network import (
     FarkleTrainer, 
     select_action_with_network, 
@@ -298,6 +298,8 @@ class SinglePlayerRLAgent(Player):
             self.log(f"RL agent decided to bank with lock combination: {chosen_combination}")
         else:
             self.log(f"RL agent decided to lock dice: {chosen_combination}")
+
+        self.log(f"RL agent currently has {state['player_points']} points")
         
         return lock_array, bank_action
     

@@ -3,9 +3,9 @@ import time
 import matplotlib.pyplot as plt
 import os
 import torch
-from controller_testing import FarkleController
-import player_testing
-import testing
+from controller import FarkleController
+import player as player_testing
+import farkle as testing
 import wrapper
 
 
@@ -149,29 +149,35 @@ class FarkleTrainer:
         result : dict
             Dictionary containing game results
         """
-        observation, info = self.controller._new_game()
-        truncated = False
-        terminated = False
-        reward = -1 if info["farkle"] else 0
-        turns = 0
-        total_reward = 0
 
-        while info["winner"] == -1 and not truncated and not terminated:
-            current_player = observation["turn"]
-            observation, reward, terminated, truncated, info = self.controller.play_turn(
-                self.controller.players[observation["turn"]], observation, info, reward, terminated, truncated
-            )
-            total_reward += reward
-            turns += 1
+        result = self.controller.play_game()
+        # raise Exception(f"{result}")
 
-        # TODO: seeing way too little negative reward. in training game, it even logs more often that player is receiving negative reward than we are actually seeing here
-        raise Exception(f"reward: {total_reward}. turns: {turns}")
 
-        return {
-            "winner": info["winner"],
-            "turns": turns,
-            "total_reward": total_reward
-        }
+        return result
+        # observation, info = self.controller._new_game()
+        # truncated = False
+        # terminated = False
+        # reward = -1 if info["farkle"] else 0
+        # turns = 0
+        # total_reward = 0
+        #
+        # while info["winner"] == -1 and not truncated and not terminated:
+        #     current_player = observation["turn"]
+        #     observation, reward, terminated, truncated, info = self.controller.play_turn(
+        #         self.controller.players[observation["turn"]], observation, info, reward, terminated, truncated
+        #     )
+        #     total_reward += reward
+        #     turns += 1
+        #
+        # # TODO: seeing way too little negative reward. in training game, it even logs more often that player is receiving negative reward than we are actually seeing here
+        # raise Exception(f"reward: {total_reward}. turns: {turns}")
+        #
+        # return {
+        #     "winner": info["winner"],
+        #     "turns": turns,
+        #     "total_reward": total_reward
+        # }
 
     def plot_training_results(self, training_stats, save_plot=True):
         """
@@ -267,6 +273,7 @@ class FarkleTrainer:
             result = self._play_training_game()
             turns_list.append(result["turns"])
             rewards_list.append(result["total_reward"])
+            assert result["total_reward"] < 0
             
             if result["winner"] == 0:
                 games_won += 1
