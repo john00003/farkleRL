@@ -161,9 +161,9 @@ class ReplayMemory:
         return len(self.memory)
 
 
-class FarkleTrainer:
+class DQNAgent:
     """
-    Trainer class for the Farkle neural network using DQN-style learning.
+    Agent class for the Farkle neural network using DQN-style learning.
     """
     
     def __init__(self, device='cpu', learning_rate=1e-4, gamma=0.99, epsilon_start=1.0, 
@@ -303,23 +303,18 @@ def prepare_legal_combinations_with_indices(legal_combinations):
     if [0,0,0,0,0,0] in legal_combinations:
         raise Exception("Invalid legal combination detected")
     
-    # Always add the empty combination (no dice locked) as index 0
-    # TODO: validate
-    if [] not in legal_combinations:
-        legal_combinations.insert(0, [])
-    
     # Create indices for each legal combination
     legal_indices = list(range(len(legal_combinations)))
     
     return legal_combinations, legal_indices
 
 
-def select_action_with_network(trainer, observation, legal_combinations_fn, training=True):
+def select_action_with_network(agent, observation, legal_combinations_fn, training=True):
     """
     Select an action using the neural network with proper input preparation and masking.
     
     Args:
-        trainer: FarkleTrainer instance
+        agent: DQNAgent instance
         observation: Game observation dictionary
         legal_combinations_fn: Function to get legal combinations from observation
         training: Whether to use training mode (epsilon-greedy) or evaluation mode (greedy)
@@ -333,17 +328,18 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
         legal_combinations: List of legal combinations (for validation)
     """
     legal_combinations = legal_combinations_fn(observation)
+    print(legal_combinations) # empty [] lock combination found here!!!!
     legal_combinations, legal_indices = prepare_legal_combinations_with_indices(legal_combinations)
     
     if len(legal_combinations) == 0:
         raise Exception("No legal lock combinations available.")
     
-    state = prepare_state_tensor(observation, trainer.device)
+    state = prepare_state_tensor(observation, agent.device)
     
-    legal_mask = prepare_legal_mask(legal_indices, device=trainer.device)
+    legal_mask = prepare_legal_mask(legal_indices, device=agent.device)
     
     if training:
-        bank_action, lock_action_idx = trainer.select_action(state, legal_mask, legal_combinations)
+        bank_action, lock_action_idx = agent.select_action(state, legal_mask, legal_combinations)
     else:
         # if not training, we are evaluating
         # use greedy selection based on Q-values, no exploration
@@ -351,7 +347,7 @@ def select_action_with_network(trainer, observation, legal_combinations_fn, trai
             state_batch = state.unsqueeze(0)
             legal_mask_batch = legal_mask.unsqueeze(0)
             
-            bank_q_value, lock_q_values = trainer.policy_net(state_batch, legal_mask_batch)
+            bank_q_value, lock_q_values = agent.policy_net(state_batch, legal_mask_batch)
             
             # Banking decision: bank if Q-value > 0
             bank_action = bank_q_value.item() > 0.0
@@ -385,11 +381,19 @@ def validate_and_convert_action(chosen_combination, bank_action, observation, co
         bank_action: Validated bank action (may be forced to False if banking is illegal)
     """
     # convert to lock array format
+    print(f"chosen: {chosen_combination}")
     lock_array = convert_lock_indices_fn(chosen_combination, observation)
     
-    if not check_lock_legal_fn(lock_array, False, controller):  # consider no banking, since choice to bank can be adjusted easily
+    # Check legality. 
+    # If the lock is empty (all zeros), it is only legal if we are banking.
+    # We check with bank=True if the lock is empty, otherwise bank=False is a stricter check that ensures the lock itself is valid.
+    check_bank_flag = False
+    if all(x == 0 for x in lock_array):
+        check_bank_flag = True
+
+    if not check_lock_legal_fn(lock_array, check_bank_flag, controller):
         # exception must be raised if lock is not legal - mask must be wrong.
-        raise Exception("Selected illegal lock combination!")
+        raise Exception(f"Selected illegal lock combination! Lock: {lock_array}, Bank check: {check_bank_flag}")
     
     if bank_action:
         if not controller.check_bank_legal({"lock": lock_array, "bank": True}):
@@ -399,13 +403,13 @@ def validate_and_convert_action(chosen_combination, bank_action, observation, co
     return lock_array, bank_action
 
 
-def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_action_idx, reward, 
+def store_transition_and_train(agent, state, legal_mask, bank_action, lock_action_idx, reward, 
                               next_observation, legal_combinations_fn, training=True):
     """
     Store the transition in replay memory and perform training step.
     
     Args:
-        trainer: FarkleTrainer instance
+        agent: DQNAgent instance
         state: Current state tensor
         legal_mask: Current legal action mask
         bank_action: Action taken (bank)
@@ -424,13 +428,13 @@ def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_act
     if not done and next_observation is not None:
         next_legal_combinations = legal_combinations_fn(next_observation)
         next_legal_combinations, next_legal_indices = prepare_legal_combinations_with_indices(next_legal_combinations)
-        next_state = prepare_state_tensor(next_observation, trainer.device)
-        next_legal_mask = prepare_legal_mask(next_legal_indices, device=trainer.device)
+        next_state = prepare_state_tensor(next_observation, agent.device)
+        next_legal_mask = prepare_legal_mask(next_legal_indices, device=agent.device)
     else:
         next_state = None
         next_legal_mask = None
     
-    trainer.memory.push(
+    agent.memory.push(
         state,
         legal_mask,
         bank_action,
@@ -441,8 +445,8 @@ def store_transition_and_train(trainer, state, legal_mask, bank_action, lock_act
         done
     )
     
-    trainer.optimize_model()
+    agent.optimize_model()
     
     # update target network periodically
-    if trainer.steps_done % 100 == 0:
-        trainer.update_target_network()
+    if agent.steps_done % 100 == 0:
+        agent.update_target_network()
