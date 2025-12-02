@@ -1,9 +1,9 @@
 import gymnasium as gym
 import numpy as np
-import farkle as testing
-import utility
-import player as player_testing
-import wrapper
+from . import farkle as testing
+from . import utility
+from . import player as player_testing
+from . import wrapper
 
 class FarkleController:
 

@@ -1,6 +1,6 @@
 import numpy as np
 import gymnasium as gym
-import utility
+from . import utility
 from gymnasium.envs.registration import register
 import copy
 

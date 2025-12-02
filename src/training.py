@@ -3,13 +3,11 @@ import time
 import matplotlib.pyplot as plt
 import os
 import torch
-from controller import FarkleController
-import player as player_testing
-import farkle as testing
-import wrapper
-
-
-from dqn_agent import DQNAgent
+from .controller import FarkleController
+from . import player as player_testing
+from . import farkle as testing
+from . import wrapper
+from . import dqn_agent
 
 class TrainingRunner:
     """

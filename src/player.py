@@ -3,8 +3,8 @@ import numpy as np
 import random
 import copy
 import torch
-from farkle import FarkleEnv, get_legal_lock_combinations
-from dqn_agent import (
+from .farkle import FarkleEnv, get_legal_lock_combinations
+from .dqn_agent import (
     DQNAgent, 
     select_action_with_network, 
     validate_and_convert_action, 
